@@ -54,8 +54,8 @@ Docker compose файл, используемый по умолчанию, по�
 Файл **`docker-compose.stack.yml`** поднимает только **php-fpm** в сети Docker **`internal`** (тот же Postgres, что `infrastructure/postgres`). Обратный прокси — **`nginx-internal`** в корне репозитория; URL приложения: **`/mylib`** (см. `FLIBUSTA_WEBROOT` и `application/tools/external_services_config/flibusta.conf`). На хост проброшен порт **8880** → HTTP `nginx-internal` (в корневом `nginx/docker-compose.yml`). Flibusta: **`http://<сервер>:8880/mylib/`**.
 
 1. Создайте сеть `internal`, поднимите Postgres и **nginx-internal** (см. корневой README репозитория).
-2. Файл **`secrets/postgres_admin_pwd.txt`** — одна строка с паролем суперпользователя Postgres (`POSTGRES_PASSWORD` из корневого `.env` для пользователя `POSTGRES_USER`).
-3. Файл **`secrets/flibusta_pwd.txt`** — пароль роли приложения `flibusta` (после первого запуска должен совпадать с тем, что записал entrypoint).
+2. Скопируйте **`secrets/postgres_admin_pwd.txt.example`** → **`secrets/postgres_admin_pwd.txt`** (одна строка: `POSTGRES_PASSWORD` из корневого `.env` для `POSTGRES_USER`). Файлы `secrets/*.txt` и `.env` в git не хранятся.
+3. Скопируйте **`secrets/flibusta_pwd.txt.example`** → **`secrets/flibusta_pwd.txt`** — пароль роли приложения `flibusta` (после первого запуска должен совпадать с тем, что записал entrypoint). Для standalone-стека также: **`.env.example`** → **`.env`**.
 4. Положите дампы SQL в **`FlibustaSQL`**, архивы *.zip — в каталог на хосте, смонтированный в `/application/flibusta` (по умолчанию `/mnt/5977acb808a7/books`). Обложки не-FB2 книг и фото авторов берутся из `cache/lib.b.attached.zip` и `cache/lib.a.attached.zip` (скачивает `getcovers.sh`); без них показываются заглушки.
 5. Из **корня** репозитория self-hosted:
 
