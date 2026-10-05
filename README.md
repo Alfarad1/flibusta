@@ -13,7 +13,7 @@
 1. Установить сервисы docker для вашего сервера.
 2. Разместить файлы проекта в каталог на сервере.
 3. Для выполнения обновления необходимо разместить фалы дампа Флибусты (*.sql) в каталог FlibustaSQL.
-4. Файлы архивов Флибусты (*.zip) необходимо размещать в каталоге Flibusta.Net.
+4. Файлы архивов Флибусты (*.zip) размещайте на диске с книгами: в корне репозитория self-hosted по умолчанию это `/mnt/5977acb808a7/books` (том в `docker-compose.yml` и `docker-compose.stack.yml`).
 5. Выполнить docker-compose build
 6. Выполнить docker-compose up -d
 7. Локальный портал будет доступен на порту 27100. Доступен также OPDS каталог: /opds/
@@ -48,5 +48,24 @@ user из официального образа. Возможно он не су
 Docker compose файл, используемый по умолчанию, поднимает веб сервер и базу данных для локального зеркала Флибусты. Однако, часто вебсервер и база данных уже работают на NAS. 
 В таком случае можно использовать их и сэкономить ресурсы сервера не поднимая несколько инстансов параллельно. Кроме того, использование централизованного reverse proxy может дать некотрые дополнительные преимущества. Папка application/tools/external_services_config 
 содержит необходимые скрипты и конфигурационные файлы для работы в такой конфигурации, а  [README](application/tools/external_services_config/README.md) описывает процесс конфигурации.
+
+## Self-hosted стек (общий Postgres, только VPN, nginx-internal)
+
+Файл **`docker-compose.stack.yml`** поднимает только **php-fpm** в сети Docker **`internal`** (тот же Postgres, что `infrastructure/postgres`). Обратный прокси — **`nginx-internal`** в корне репозитория; URL приложения: **`/mylib`** (см. `FLIBUSTA_WEBROOT` и `application/tools/external_services_config/flibusta.conf`). На хост проброшен порт **8880** → HTTP `nginx-internal` (в корневом `nginx/docker-compose.yml`). Flibusta: **`http://<сервер>:8880/mylib/`**.
+
+1. Создайте сеть `internal`, поднимите Postgres и **nginx-internal** (см. корневой README репозитория).
+2. Файл **`secrets/postgres_admin_pwd.txt`** — одна строка с паролем суперпользователя Postgres (`POSTGRES_PASSWORD` из корневого `.env` для пользователя `POSTGRES_USER`).
+3. Файл **`secrets/flibusta_pwd.txt`** — пароль роли приложения `flibusta` (после первого запуска должен совпадать с тем, что записал entrypoint).
+4. Положите дампы SQL в **`FlibustaSQL`**, архивы *.zip — в каталог на хосте, смонтированный в `/application/flibusta` (по умолчанию `/mnt/5977acb808a7/books`). Обложки не-FB2 книг и фото авторов берутся из `cache/lib.b.attached.zip` и `cache/lib.a.attached.zip` (скачивает `getcovers.sh`); без них показываются заглушки.
+5. Из **корня** репозитория self-hosted:
+
+```bash
+docker compose --env-file .env -f books/flibusta_web/flibusta/docker-compose.stack.yml build
+docker compose --env-file .env -f books/flibusta_web/flibusta/docker-compose.stack.yml up -d
+```
+
+Переменная **`POSTGRES_USER`** из корневого `.env` передаётся в контейнер как **`POSTGRES_ADMIN_USER`** для первичной инициализации БД. При необходимости скопируйте [`.env.stack.example`](.env.stack.example) и укажите `APPUSER_PUID` / `APPUSER_PGID` / `TIME_ZONE_VALUE`. PUID/PGID применяются при сборке образа: php-fpm работает с этим uid, поэтому `cache` и `FlibustaSQL` должны принадлежать этому пользователю.
+
+После запуска выполните **«Обновление базы»** в меню **«Сервис»** в веб-интерфейсе.
 
 

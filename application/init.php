@@ -6,6 +6,12 @@ define('AUTHORS_PAGE', 50);
 define('SERIES_PAGE', 50);
 define('OPDS_FEED_COUNT', 100);
 define('COUNT_BOOKS', true);
+define('FB2C_PATH', '/opt/fb2c/fb2c');
+define('CONVERT_FORMATS', [
+	'epub' => 'application/epub+zip',
+	'azw3' => 'application/x-mobi8-ebook',
+	'mobi' => 'application/x-mobipocket-ebook',
+]);
 include(ROOT_PATH . 'functions.php');
 include(ROOT_PATH . 'dbinit.php');
 include_once(ROOT_PATH . 'webroot.php');

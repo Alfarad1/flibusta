@@ -1,0 +1,49 @@
+# Flibusta php-fpm + shared Postgres on Docker network "internal" (VPN via nginx-internal).
+# From repo root:
+#   docker compose --env-file .env -f books/flibusta_web/flibusta/docker-compose.stack.yml up -d
+# Ensure secrets/postgres_admin_pwd.txt matches POSTGRES_PASSWORD for POSTGRES_USER in root .env.
+
+services:
+  flibusta-fpm:
+    build:
+      context: phpdocker/php-fpm
+      args:
+        PUID: ${APPUSER_PUID:-1000}
+        PGID: ${APPUSER_PGID:-1000}
+    working_dir: /application
+    container_name: flibusta-fpm
+    environment:
+      - TZ=${TIME_ZONE_VALUE:-Europe/Moscow}
+      - FLIBUSTA_WEBROOT=/mylib
+      - FLIBUSTA_DBUSER=flibusta
+      - FLIBUSTA_DBNAME=flibusta
+      - FLIBUSTA_DBTYPE=postgres
+      - FLIBUSTA_DBHOST=postgres
+      - FLIBUSTA_DBPASSWORD_FILE=/run/secrets/FLIBUSTA_PWD
+      - POSTGRES_ADMIN_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_ADMIN_DBPASSWORD_FILE=/run/secrets/POSTGRES_ADMIN_PWD
+      - DB_HOST_PINGS=3
+    command: /application/tools/external_services_config/flibusta_entrypoint.sh
+    networks:
+      - internal
+    volumes:
+      - ./application:/application
+      - ./cache:/application/cache
+      - /mnt/0dbeb7b3/books:/application/flibusta
+      - ./FlibustaSQL:/application/sql
+      - ./phpdocker/php-fpm/php-ini-overrides.ini:/usr/local/etc/php/conf.d/local-custom.ini
+      - ./phpdocker/php-fpm/php-fpm.conf:/usr/local/etc/php-fpm.d/zz-php-fpm.conf
+    secrets:
+      - FLIBUSTA_PWD
+      - POSTGRES_ADMIN_PWD
+    restart: unless-stopped
+
+secrets:
+  FLIBUSTA_PWD:
+    file: ./secrets/flibusta_pwd.txt
+  POSTGRES_ADMIN_PWD:
+    file: ./secrets/postgres_admin_pwd.txt
+
+networks:
+  internal:
+    external: true

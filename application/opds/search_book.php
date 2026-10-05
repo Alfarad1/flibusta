@@ -20,12 +20,12 @@ if ($q == '') {
 
 //$filter2 = "AND libbook.Title LIKE " . DB::es('%' . $q . '%');
 
-$books = $dbh->prepare("SELECT DISTINCT BookId, libbook.Title as BookTitle,
+$books = $dbh->prepare("SELECT DISTINCT BookId, libbook.Title as BookTitle, libbook.filetype,
         (SELECT Body FROM libbannotations WHERE BookId=libbook.BookId LIMIT 1) as Body
 		FROM libbook
 		JOIN libgenre USING(BookId) 
 		WHERE deleted='0' AND libbook.Title LIKE :q
-		GROUP BY BookId, BookTitle, Body
+		GROUP BY BookId, BookTitle, libbook.filetype, Body
 		LIMIT 100");
 		$param = '%'.$q.'%';
 $books->bindParam(":q", $param);
@@ -50,7 +50,12 @@ while ($b = $books->fetchObject()) {
 
 	echo "<link rel='http://opds-spec.org/image/thumbnail' href='$webroot/extract_cover.php?id=$b->bookid' type='image/jpeg'/>";
 	echo "<link rel='http://opds-spec.org/image' href='$webroot/extract_cover.php?id=$b->bookid' type='image/jpeg'/>";
-	echo " <link href='$webroot/fb2.php?id=$b->bookid' rel='http://opds-spec.org/acquisition/open-access' type='application/fb2+zip' />";
+	if (trim($b->filetype) == 'fb2') {
+		echo " <link href='$webroot/fb2.php?id=$b->bookid' rel='http://opds-spec.org/acquisition/open-access' type='application/fb2+zip' />";
+		opds_convert_links($b->bookid, $webroot);
+	} else {
+		echo " <link href='$webroot/usr.php?id=$b->bookid' rel='http://opds-spec.org/acquisition/open-access' type='application/" . trim($b->filetype) . "' />";
+	}
 
 	echo "</entry>\n";
 }

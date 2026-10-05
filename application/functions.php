@@ -98,6 +98,36 @@ function to_pg_array($set) {
 }
 
 
+function is_book_available($bookid) {
+	global $dbh;
+	static $stmt = null;
+	if ($stmt === null) {
+		$stmt = $dbh->prepare("SELECT 1 FROM book_available WHERE bookid=:id");
+	}
+	$stmt->execute([':id' => $bookid]);
+	return $stmt->fetchColumn() !== false;
+}
+
+function convert_menu($book, $webroot = '') {
+	if (trim($book->filetype) != 'fb2') {
+		return '';
+	}
+	$h = "<div class='btn-group' role='group'>";
+	$h .= "<button type='button' class='btn btn-outline-success btn-sm dropdown-toggle' data-bs-toggle='dropdown' aria-expanded='false' title='Скачать в другом формате'></button>";
+	$h .= "<ul class='dropdown-menu'>";
+	foreach (array_keys(CONVERT_FORMATS) as $fmt) {
+		$h .= "<li><a class='dropdown-item' href='$webroot/convert.php?id=$book->bookid&amp;fmt=$fmt'>" . strtoupper($fmt) . "</a></li>";
+	}
+	$h .= "</ul></div>";
+	return $h;
+}
+
+function opds_convert_links($bookid, $webroot = '') {
+	foreach (CONVERT_FORMATS as $fmt => $mime) {
+		echo "\n <link href='$webroot/convert.php?id=$bookid&amp;fmt=$fmt' rel='http://opds-spec.org/acquisition/open-access' type='$mime' />";
+	}
+}
+
 function book_small_pg($book, $webroot='',$full = false) {
 	global $dbh, $user_uuid;
 	if (!isset($book->bookid)) {
@@ -123,22 +153,28 @@ function book_small_pg($book, $webroot='',$full = false) {
 		$year = $dt;
 	}
 
-	$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav WHERE user_uuid=:uuid AND bookid=:id");
-	$stmt->bindParam(":uuid", $user_uuid);
-	$stmt->bindParam(":id", $book->bookid);
-	$stmt->execute();
-	if ($stmt->fetch()->cnt > 0) {
-		$fav = 'btn-primary';
-		$fav_url = "?unfav_book=$book->bookid";
-	} else {
-		$fav = 'btn-outline-secondary';
-		$fav_url = "?fav_book=$book->bookid";
+	$fav = 'btn-outline-secondary';
+	$fav_url = "?fav_book=$book->bookid";
+	if ($user_uuid != '') {
+		$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav WHERE user_uuid=:uuid AND bookid=:id");
+		$stmt->bindParam(":uuid", $user_uuid);
+		$stmt->bindParam(":id", $book->bookid);
+		$stmt->execute();
+		if ($stmt->fetch()->cnt > 0) {
+			$fav = 'btn-primary';
+			$fav_url = "?unfav_book=$book->bookid";
+		}
 	}
 
 	echo "<div>$book->title</div></a>";
 	echo "<div class='btn-group w-100 mt-auto' role='group'>";
 	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$year</button>";
-	echo "<a href='$fhref' title='Скачать' type='button' class='btn btn-outline-$ft btn-sm'>$book->filetype</a>";
+	if (is_book_available($book->bookid)) {
+		echo "<a href='$fhref' title='Скачать' type='button' class='btn btn-outline-$ft btn-sm'>$book->filetype</a>";
+		echo convert_menu($book, $webroot);
+	} else {
+		echo "<button type='button' class='btn btn-outline-secondary btn-sm' disabled title='Файла нет в локальном архиве'>нет файла</button>";
+	}
 //	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$book->lang</button>";
 	echo "<a href='$fav_url' title='В избранное' type='button' class='btn $fav btn-sm'><i class='fas fa-heart'></i></a>";
 	
@@ -177,7 +213,12 @@ function book_info_pg($book, $webroot = '', $full = false) {
 
 	echo "<div class='btn-group w-100 mt-1' role='group'>";
 	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$year</button>";
-	echo "<a href='$fhref' title='Скачать' type='button' class='btn btn-outline-$ft btn-sm'>$book->filetype</a>";
+	if (is_book_available($book->bookid)) {
+		echo "<a href='$fhref' title='Скачать' type='button' class='btn btn-outline-$ft btn-sm'>$book->filetype</a>";
+		echo convert_menu($book, $webroot);
+	} else {
+		echo "<button type='button' class='btn btn-outline-secondary btn-sm' disabled title='Файла нет в локальном архиве'>нет файла</button>";
+	}
 //	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$book->lang</button>";
 	if ($user_uuid != '') {
 		$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav WHERE user_uuid=:uuid AND bookid=:id");
@@ -612,13 +653,13 @@ function opds_book($b,$webroot = '') {
 		WHERE a.bookid=:id");
 	$au->bindParam(":id", $b->bookid);
 	$au->execute();
-	while ($a = $au->fetch()) {
+	$authors = $au->fetchAll();
+	foreach ($authors as $a) {
 		echo "<name>$a->lastname $a->firstname $a->middlename</name>";
 		echo "<uri>/opds/author?author_id=$a->avtorid</uri>";
 	}
 	echo "</author>";
-	$au->execute();
-	while ($a = $au->fetch()) {
+	foreach ($authors as $a) {
 		echo "\n <link href='$webroot/opds/list?author_id=$a->avtorid' rel='related' type='application/atom+xml' title='Все книги автора $a->lastname $a->firstname $a->middlename' />";
 	}
 	echo " <dc:language>" . trim($b->lang) . "</dc:language>";
@@ -651,6 +692,9 @@ function opds_book($b,$webroot = '') {
 		$ur = 'usr';
 	}
 	echo "\n <link href='$webroot/$ur.php?id=$b->bookid' rel='http://opds-spec.org/acquisition/open-access' type='application/" . trim($b->filetype) . "' />";
+	if ($ur == 'fb2') {
+		opds_convert_links($b->bookid, $webroot);
+	}
 	echo "\n <link href='$webroot/book/view/$b->bookid' rel='alternate' type='text/html' title='Книга на сайте' />";
 
 	echo "</entry>\n";

@@ -1,7 +1,7 @@
 <?php
 header('Content-Type: application/atom+xml; charset=utf-8');
 
-$letters = $_GET['letters'] ?? '';
+$letters = preg_replace('/[^\p{L}\p{N} ]/u', '', $_GET['letters'] ?? '');
 
 if ($letters !== '') {
     $length_letters = mb_strlen($letters, 'UTF-8');
@@ -23,10 +23,11 @@ _XML;
 $query="
 	SELECT UPPER(SUBSTR(LastName, 1, ".($length_letters + 1).")) as alpha, COUNT(*) as cnt
 	FROM libavtorname
-	WHERE UPPER(SUBSTR(LastName, 1, ".($length_letters + 1).")) SIMILAR TO '".$letters."[A-ZА-Я]'
+	WHERE UPPER(SUBSTR(LastName, 1, ".($length_letters + 1).")) SIMILAR TO :pattern
 	GROUP BY UPPER(SUBSTR(LastName, 1, ".($length_letters + 1)."))
 	ORDER BY alpha";
-$ai = $dbh->query($query);
+$ai = $dbh->prepare($query);
+$ai->execute([':pattern' => $letters . '[A-ZА-Я]']);
 while ($ach = $ai->fetchObject()) {
 	echo "\n<entry> <updated>$cdt</updated>";
 	echo "<id>tag:authors:$ach->alpha</id>";

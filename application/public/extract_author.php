@@ -1,6 +1,5 @@
 <?php
 include('../init.php');
-$cover = '';
 header('Cache-Control: public, max-age=86400');
 
 function lastm($path) {
@@ -12,16 +11,11 @@ function lastm($path) {
 		header("Expires: " . gmdate("D, d M Y H:i:s", filemtime($path) + 60*60*24) . " GMT");
 		header("Last-Modified: " . gmdate("D, d M Y H:i:s", filemtime($path)) . " GMT");
 
-		echo file_get_contents($path);
+		readfile($path);
 	}
 }
 
-if (isset($_GET['id'])) {
-	$id = $_GET['id'];
-} else {
-	$id = 0;
-}
-$iid = $id;
+$id = intval($_GET['id'] ?? 0);
 
 header("Content-type: image/jpeg");
 
@@ -30,20 +24,23 @@ if (file_exists(ROOT_PATH . "cache/authors/$id.jpg")) {
 	die();
 }
 
-$stmt = $dbh->prepare("SELECT file FROM libapics WHERE AvtorId=$id");
-$stmt->execute();
+$stmt = $dbh->prepare("SELECT file FROM libapics WHERE AvtorId=:id LIMIT 1");
+$stmt->execute([':id' => $id]);
 $f = $stmt->fetch();
 
-if (isset($f->file)) {
-	$zip = new ZipArchive(); 
-	if ($zip->open(ROOT_PATH . "cache/lib.a.attached.zip")) {
-		$f = $zip->getFromName($f->file);
-		if (strlen($f) > 0) {
-			file_put_contents(ROOT_PATH . "cache/authors/$id.jpg", $f);
-			echo $f;
+$attached = ROOT_PATH . "cache/lib.a.attached.zip";
+if (isset($f->file) && is_file($attached)) {
+	$zip = new ZipArchive();
+	if ($zip->open($attached) === true) {
+		$data = $zip->getFromName($f->file);
+		$zip->close();
+		if ($data !== false && strlen($data) > 0) {
+			@file_put_contents(ROOT_PATH . "cache/authors/$id.jpg", $data);
+			echo $data;
 			die();
 		}
 	}
-	$zip->close();
 }
 
+header("Content-type: image/png");
+readfile(ROOT_PATH . 'public/i/default_avatar.png');

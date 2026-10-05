@@ -3,10 +3,10 @@ error_reporting(E_ALL);
 include('../dbinit.php');
 
 if ($handle = opendir('/application/flibusta')) {
-	$stmt = $dbh->prepare("TRUNCATE book_zip;");
-	$stmt->execute();
-
 	$dbh->beginTransaction();
+
+	$stmt = $dbh->prepare("DELETE FROM book_zip;");
+	$stmt->execute();
 
 	while (false !== ($entry = readdir($handle))) {   
 		if (strpos($entry, "-") !== false && strpos($entry, ".zip") !== false && substr($entry, -9) !== ".zip.part") {
@@ -31,6 +31,15 @@ if ($handle = opendir('/application/flibusta')) {
 		}
 		echo "\n";
 	}
+
+	$dbh->exec("CREATE TABLE IF NOT EXISTS book_available (bookid bigint PRIMARY KEY)");
+	$dbh->exec("DELETE FROM book_available");
+	$dbh->exec("INSERT INTO book_available (bookid)
+		SELECT b.bookid FROM libbook b
+		WHERE EXISTS (SELECT 1 FROM book_zip z
+			WHERE b.bookid BETWEEN z.start_id AND z.end_id
+			AND z.usr = CASE WHEN b.filetype = 'fb2' THEN 0 ELSE 1 END)");
 	$dbh->commit();
+	$dbh->exec("ANALYZE book_available");
 	closedir($handle);
 }

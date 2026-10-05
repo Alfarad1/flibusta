@@ -31,6 +31,12 @@ if [ `$SQL_CMD -c "select 1 from pg_roles where rolname='flibusta'"  | wc -l` -e
     if [ -z "$POSTGRES_ADMIN_USER" ]; then
         POSTGRES_ADMIN_USER=postgres
     fi
+
+    # Admin connects to a maintenance DB (postgres by default), not to a DB
+    # named after the admin role (e.g. george), which may not exist.
+    if [ -z "$POSTGRES_ADMIN_DB" ]; then
+        POSTGRES_ADMIN_DB=postgres
+    fi
     
     if [ ! -z "$POSTGRES_ADMIN_DBPASSWORD_FILE" ] && [ -e $POSTGRES_ADMIN_DBPASSWORD_FILE ]; then
         TPOSTGRES_ADMIN_PASSWD=`cat $POSTGRES_ADMIN_DBPASSWORD_FILE`
@@ -48,7 +54,7 @@ if [ `$SQL_CMD -c "select 1 from pg_roles where rolname='flibusta'"  | wc -l` -e
         exit 1
     fi
 
-    psql -h $FLIBUSTA_DBHOST -d $POSTGRES_ADMIN_USER -U $POSTGRES_ADMIN_USER -v FLIBUSTA_DBUSER="$FLIBUSTA_DBUSER"  -v FLIBUSTA_DBPASSWORD="$FLIBUSTA_DBPASSWORD" -v FLIBUSTA_DBNAME="$FLIBUSTA_DBNAME" -f /application/tools/external_services_config/external_postgres_init.sql
+    psql -h $FLIBUSTA_DBHOST -d $POSTGRES_ADMIN_DB -U $POSTGRES_ADMIN_USER -v FLIBUSTA_DBUSER="$FLIBUSTA_DBUSER"  -v FLIBUSTA_DBPASSWORD="$FLIBUSTA_DBPASSWORD" -v FLIBUSTA_DBNAME="$FLIBUSTA_DBNAME" -f /application/tools/external_services_config/external_postgres_init.sql
     #restore flibusta password
     export PGPASSWORD=$FLIBUSTA_DBPASSWORD
 

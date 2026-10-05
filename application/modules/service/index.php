@@ -5,7 +5,7 @@
 <h4 class="rounded-top p-1" style="background: #d0d0d0;">Статистика</h4>
 <div class='card-body'>
 <?php
-$status_import = (trim(shell_exec('ps aux|grep app_|grep -v grep') ?? '') !== '');
+$status_import = (trim(shell_exec('ps -ef | grep app_ | grep -v grep') ?? '') !== '');
 
 function get_ds($path){
 	$io = popen ( '/usr/bin/du -sk ' . $path, 'r' );
@@ -17,6 +17,9 @@ function get_ds($path){
 
 if (!$status_import) {
 	$cache_size = get_ds("/application/cache/covers") + get_ds("/application/cache/authors");
+	if (is_dir("/application/cache/converted")) {
+		$cache_size += get_ds("/application/cache/converted");
+	}
 	$books_size = round(get_ds("/application/flibusta") / 1024, 1);
 	$qtotal = $dbh->query("SELECT (SELECT MAX(time) FROM libbook) mmod, (SELECT COUNT(*) FROM libbook) bcnt, (SELECT COUNT(*) FROM libbook WHERE deleted='0') bdcnt");
 	$qtotal->execute();
@@ -45,6 +48,7 @@ if (!$status_import) {
 if (isset($_GET['empty'])) {
 	shell_exec('rm /application/cache/authors/*');
 	shell_exec('rm /application/cache/covers/*');
+	shell_exec('rm -f /application/cache/converted/*');
 	header("location:$webroot/service/");
 }
 
@@ -73,7 +77,10 @@ echo "<a class='btn btn-warning m-1' href='?reindex'>Сканирование ZI
 echo "</div>";
 
 if ($status_import) {
-	$op = file_get_contents('/application/sql/status');;
+	$op = '';
+	if (file_exists('/application/sql/status')) {
+		$op = file_get_contents('/application/sql/status');
+	}
 	echo "<div class='d-flex align-items-center m-3'>";
 	echo nl2br($op);
 	echo "<div class='spinner-border ms-auto' role='status' aria-hidden='true'></div></div>";
@@ -97,7 +104,7 @@ if ($status_import) {
 <p>
 Чтобы отображались фото авторов и обложек для форматов, отличных от FB2, необходимо разместить в каталоге cache файлы архивов lib.a.attached.zip и lib.b.attached.zip соответственно.
 В кэше хранятся распакованные фото авторов и обложек для FB2, а также их уменьшенные версии.</p>
-<p>Файлы архивов Флибусты (*.zip) необходимо размещать в каталоге Flibusta.Net. Обрабатываются также файлы ежедневных обновлений, но обязательно необходимо подгружать свежие SQL файлы.</p>
+<p>Файлы архивов Флибусты (*.zip) необходимо размещать в каталоге, смонтированном в /application/flibusta (на хосте /mnt/5977acb808a7/books). Обрабатываются также файлы ежедневных обновлений, но обязательно необходимо подгружать свежие SQL файлы.</p>
 <?php echo "<p>Доступен также OPDS-каталог для читалок: <a href='$webroot/opds/'>/opds/</a></p>"; ?>
 <p><b>Каталоги FlibustaSQL, cache и их подкаталоги должны иметь права на запись для контейнера. Скрипты в каталоге /application/tools/ должны иметь права на выполнение.</b></p>
 </div></div></div></div>

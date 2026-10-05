@@ -1,7 +1,7 @@
 <?php
 header('Content-Type: application/atom+xml; charset=utf-8');
 
-$letters = $_GET['letters'] ?? '';
+$letters = preg_replace('/[^\p{L}\p{N} ]/u', '', $_GET['letters'] ?? '');
 
 if ($letters !== '') {
     $length_letters = mb_strlen($letters, 'UTF-8');

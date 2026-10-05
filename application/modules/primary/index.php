@@ -13,13 +13,18 @@ if (isset($_GET['ru'])) {
 		$_SESSION['ru'] = true;
 	}
 }
+if (isset($_GET['missing'])) {
+	if ($_GET['missing'] == '') {
+		unset($_SESSION['show_missing']);
+	} else {
+		$_SESSION['show_missing'] = true;
+	}
+}
 if (isset($_GET['q'])) {
 	if ($_GET['q'] == '') {
 		unset($_SESSION['search']);
 	} else {
-		$get = mb_strtolower($_GET['q']);
-		$search = str_replace(' ', '&', $get);
-		$_SESSION['search'] = $search;
+		$_SESSION['search'] = mb_strtolower(trim($_GET['q']));
 	}
 }
 
@@ -81,6 +86,13 @@ if (isset($_SESSION['ru'])) {
 	$fcontent .= "<a class='btn bg-success text-white bg-opacity-90 text-white' href='$webroot/?ru'>На русском</a> ";
 } else {
 	$fcontent .= "<a class='btn bg-success text-white bg-opacity-50 text-white' href='$webroot/?ru=1'>Все языки</a> ";
+}
+
+if (isset($_SESSION['show_missing'])) {
+	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-50' href='$webroot/?missing' title='Показаны и книги, файлов которых нет в локальном архиве'>Включая отсутствующие</a> ";
+} else {
+	$filter .= "AND EXISTS (SELECT 1 FROM book_available ba WHERE ba.bookid=b.BookId) ";
+	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-90' href='$webroot/?missing=1' title='Скрыты книги, файлов которых нет в локальном архиве'>Только доступные</a> ";
 }
 $fcontent .= '</div>';
 
@@ -147,11 +159,11 @@ if (isset($_SESSION['filter_series'])) {
 }
 
 if (isset($_SESSION['search'])) {
-	$filter .= "AND vector @@ to_tsquery('russian', :search) ";
+	$filter .= "AND vector @@ websearch_to_tsquery('russian', :search) ";
 	$join .= 'LEFT JOIN libbook_ts USING(bookid) ';
 
 	$fcontent .= "<div class='badge bg-success p-1 text-white'>";
-	$fcontent .= "<a class='text-white' href='$webroot/?q'>" . $_SESSION['search'] . " <i class='fas fa-times-circle'></i></a></div> ";
+	$fcontent .= "<a class='text-white' href='$webroot/?q'>" . htmlspecialchars($_SESSION['search']) . " <i class='fas fa-times-circle'></i></a></div> ";
 }
 
 if (isset($_SESSION['filter_series'])) {

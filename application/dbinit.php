@@ -26,7 +26,11 @@ try {
 	$dbh->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
 	$dbh->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
 } catch(Exception $e) {
-	print_r($e);
+	error_log('DB connection failed: ' . $e->getMessage());
+	if (PHP_SAPI !== 'cli') {
+		http_response_code(503);
+	}
+	die('База данных недоступна');
 }
 
 ?>

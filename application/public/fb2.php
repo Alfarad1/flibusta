@@ -1,6 +1,6 @@
 <?php
 if (isset($_GET['id'])) {
-	$id = $_GET['id'];
+	$id = intval($_GET['id']);
 } else {
 	die();
 }
@@ -24,10 +24,15 @@ $book = $stmt->fetch();
 
 $stmt = $dbh->prepare("SELECT * FROM book_zip WHERE $id BETWEEN start_id AND end_id AND usr=0");
 $stmt->execute();
-$zip_name = $stmt->fetch()->filename;
+$zip_row = $stmt->fetch();
+if (!$zip_row) {
+	http_response_code(404);
+	die("Файл книги отсутствует в локальном архиве");
+}
+$zip_name = $zip_row->filename;
 $zip = new ZipArchive();
 
-if ($zip->open(ROOT_PATH . "flibusta/" . $zip_name)) {
+if ($zip->open(ROOT_PATH . "flibusta/" . $zip_name) === true) {
 	$filename = $book->author_name . " - " . $book->booktitle . " " . $id . ".fb2";
 	header('Content-Description: File Transfer');
 	header('Content-Type: application/octet-stream');
