@@ -7,74 +7,48 @@ echo <<< _XML
  <updated>$cdt</updated>
  <icon>/favicon.ico</icon>
  <link href="$webroot/opds-opensearch.xml.php" rel="search" type="application/opensearchdescription+xml" />
- <link href="$webroot/opds/authorsindex?letters={searchTerm}" rel="search" type="application/atom+xml" />
+ <link href="$webroot/opds/search?by=author&amp;q={searchTerms}" rel="search" type="application/atom+xml" />
  <link href="$webroot/opds" rel="start" type="application/atom+xml;profile=opds-catalog" />
-
-
-<entry> <updated>$cdt</updated>
- <id>tag:search:author</id>
- <title>Поиск авторов</title>
- <content type="text">Поиск авторов по фамилии</content>
- <link href="$webroot/opds/authorsindex?letters={searchTerm}" type="application/atom+xml;profile=opds-catalog" />
-</entry>
 _XML;
 
-$q = $_GET['q'];
+$q = trim($_GET['q'] ?? '');
+$prefix = trim($_GET['prefix'] ?? '');
 
-if ($q == '') {
-	die(':(');
+$params = [];
+$tsq = search_tsquery_sql($q, $params);
+if ($prefix !== '') {
+	// переход из алфавитного указателя authorsindex: фамилия начинается с букв
+	$params = [':prefix' => $prefix . '%'];
+	$join = '';
+	$where = 'an.lastname ILIKE :prefix';
+	$order = 'an.lastname, an.firstname';
+} elseif ($tsq !== null) {
+	// поиск по любой части имени, в любом порядке
+	$join = "JOIN libavtorname_ts ts ON ts.avtorid=an.avtorid CROSS JOIN (SELECT $tsq AS query) sq";
+	$where = 'ts.vector @@ sq.query';
+	$order = 'ts_rank(ts.vector, sq.query) DESC, cnt DESC, an.lastname, an.firstname';
+} else {
+	echo '</feed>';
+	return;
 }
-$queryParam = $q . '%';
-$authors = $dbh->prepare("SELECT *, 
-		(SELECT COUNT(*) FROM libavtor, libbook WHERE 
-		libbook.deleted='0' AND
-		libbook.bookid=libavtor.bookid AND
-		libavtor.avtorid=libavtorname.avtorid) cnt
-		FROM libavtorname
-		WHERE lastname ILIKE :q ORDER BY lastname, firstname");
-		$authors->bindParam(":q", $queryParam);
-		$authors->execute();
+
+$authors = $dbh->prepare("SELECT an.avtorid, an.lastname, an.firstname, an.middlename, an.nickname, c.cnt
+	FROM libavtorname an
+	$join
+	CROSS JOIN LATERAL (SELECT COUNT(*) cnt
+		FROM libavtor la JOIN libbook b USING(bookid)
+		WHERE la.avtorid=an.avtorid AND b.deleted='0') c
+	WHERE $where AND c.cnt > 0
+	ORDER BY $order
+	LIMIT " . OPDS_FEED_COUNT);
+$authors->execute($params);
 while ($a = $authors->fetch()) {
-	if ($a->cnt > 0) {
-		echo "\n<entry> <updated>$cdt</updated>";
-		echo " <id>tag:author:$a->avtorid</id>";
-		echo " <title>$a->lastname $a->firstname $a->middlename $a->nickname</title>";
-
-		$stmt = $dbh->query("SELECT COUNT(*) as cnt FROM libbook,libavtor WHERE deleted='0' AND libavtor.bookid=libbook.bookid AND libavtor.avtorid=$a->avtorid");
-		$stmt->execute();
-		$books_cnt = $stmt->fetch()->cnt;
-		$stmt = null;
-		echo " <content type='text'>$books_cnt книг</content>";
-		echo " <link href='$webroot/opds/author?author_id=$a->avtorid' type='application/atom+xml;profile=opds-catalog' />";
-		echo '</entry>';
-	}
+	echo "\n<entry> <updated>$cdt</updated>";
+	echo " <id>tag:author:$a->avtorid</id>";
+	echo " <title>" . htmlspecialchars("$a->lastname $a->firstname $a->middlename $a->nickname") . "</title>";
+	echo " <content type='text'>$a->cnt книг</content>";
+	echo " <link href='$webroot/opds/author?author_id=$a->avtorid' type='application/atom+xml;profile=opds-catalog' />";
+	echo '</entry>';
 }
-
-
-/*
-echo "<div class='mdl-color--white mdl-shadow--2dp mdl-cell mdl-cell--12-col mdl-grid'>";
-echo '<div class="mdl-grid">';
-$seqs = DB::query("SELECT *,
-	(SELECT COUNT(*) FROM libseq WHERE libseq.seqid=libseqname.SeqId) cnt
-	FROM libseqname $filter4 ORDER BY seqname");
-
-while ($s = $seqs->fetch_object()) {
-	if ($s->cnt > 0) {
-		echo "<div class='mdl-cell--4-col'>";
-
-		echo "<span class='mdl-chip' onclick=\"location='/library/seq/$s->SeqId'\">";
-
-		echo "<span class='mdl-chip__text'>$s->SeqName</span>";
-
-
-
-		echo "<span class='mdl-chip__action'>$s->cnt</span>";
-
-		echo "</span>";
-
-		echo "</div>";
-	}
-}
-*/
 ?>
 </feed>
