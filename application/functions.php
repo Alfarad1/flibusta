@@ -32,6 +32,11 @@ function show_gpager($page_count, $block_size = 100) {
 	} else {
 		$page = 0;
 	}
+	// поисковый запрос живёт в URL, его нужно сохранять при листании
+	$extra = '';
+	if (isset($_GET['q']) && trim($_GET['q']) !== '') {
+		$extra = '&amp;q=' . urlencode(trim($_GET['q']));
+	}
 	if ($page_count > 1) {
 		echo "<nav><ul class='pagination pagination-sm'>";
 
@@ -47,7 +52,7 @@ function show_gpager($page_count, $block_size = 100) {
 		}
 
     	if ($b1 > 1) {
- 			echo "<li class='page-item'><a class='page-link' href='?page=", $b1 - 2, "' aria-label='Previous'><span aria-hidden='true'><i class='fas fa-angle-left'></i></span></a></li>";
+ 			echo "<li class='page-item'><a class='page-link' href='?page=", $b1 - 2, "$extra' aria-label='Previous'><span aria-hidden='true'><i class='fas fa-angle-left'></i></span></a></li>";
 	    	
     	}
 
@@ -57,12 +62,12 @@ function show_gpager($page_count, $block_size = 100) {
 			} else {
 				$pv = '';
 			}
-			echo "<li class='page-item $pv'><a class='page-link' href='?page=", $p - 1, "'>$p</a></li>";
+			echo "<li class='page-item $pv'><a class='page-link' href='?page=", $p - 1, "$extra'>$p</a></li>";
 		}
 		$pv = '';		
     	
     	if ($b2 < $page_count) {
-    		echo "<li class='page-item'><a class='page-link' href='?page=", $b2, "' aria-label='Next'><span aria-hidden='true'><i class='fas fa-angle-right'></i></span></a></li>";
+    		echo "<li class='page-item'><a class='page-link' href='?page=", $b2, "$extra' aria-label='Next'><span aria-hidden='true'><i class='fas fa-angle-right'></i></span></a></li>";
     	}
 
 		echo '</ul></nav>';

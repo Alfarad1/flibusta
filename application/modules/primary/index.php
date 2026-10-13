@@ -20,13 +20,18 @@ if (isset($_GET['missing'])) {
 		$_SESSION['show_missing'] = true;
 	}
 }
-if (isset($_GET['q'])) {
-	if ($_GET['q'] == '') {
-		unset($_SESSION['search']);
-	} else {
-		$_SESSION['search'] = mb_strtolower(trim($_GET['q']));
-	}
+// Поисковый запрос берётся только из URL: результаты можно открыть по ссылке,
+// а «Назад» в браузере работает как ожидается
+unset($_SESSION['search']);
+$search = trim($_GET['q'] ?? '');
+$params = [];
+$order_params = [];
+$search_tsq = search_tsquery_sql($search, $params);
+if ($search_tsq !== null && !isset($_GET['sort'])) {
+	$order = search_books_order_sql($search, $order_params);
 }
+// дописывается к ссылкам фильтров, чтобы переключение фильтра не сбрасывало поиск
+$qamp = $search !== '' ? '&amp;q=' . urlencode($search) : '';
 
 if (isset($_GET['aid'])) {
 	if ($_GET['aid'] == '') {
@@ -76,29 +81,30 @@ $cols = '';
 $fcontent .= '<div class="btn-group mt-1 me-1" role="group">';
 if (isset($_SESSION['fb2'])) {
 	$filter .= "AND filetype='fb2' ";
-	$fcontent .= "<a class='btn bg-dark text-white bg-opacity-90 text-white' href='$webroot/?fb2'>Только FB2</a> ";
+	$fcontent .= "<a class='btn bg-dark text-white bg-opacity-90 text-white' href='$webroot/?fb2$qamp'>Только FB2</a> ";
 } else {
-	$fcontent .= "<a class='btn bg-dark text-white bg-opacity-50 text-white' href='$webroot/?fb2=1'>Все форматы</a> ";
+	$fcontent .= "<a class='btn bg-dark text-white bg-opacity-50 text-white' href='$webroot/?fb2=1$qamp'>Все форматы</a> ";
 }
 
 if (isset($_SESSION['ru'])) {
 	$filter .= "AND lang='ru' ";
-	$fcontent .= "<a class='btn bg-success text-white bg-opacity-90 text-white' href='$webroot/?ru'>На русском</a> ";
+	$fcontent .= "<a class='btn bg-success text-white bg-opacity-90 text-white' href='$webroot/?ru$qamp'>На русском</a> ";
 } else {
-	$fcontent .= "<a class='btn bg-success text-white bg-opacity-50 text-white' href='$webroot/?ru=1'>Все языки</a> ";
+	$fcontent .= "<a class='btn bg-success text-white bg-opacity-50 text-white' href='$webroot/?ru=1$qamp'>Все языки</a> ";
 }
 
 if (isset($_SESSION['show_missing'])) {
-	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-50' href='$webroot/?missing' title='Показаны и книги, файлов которых нет в локальном архиве'>Включая отсутствующие</a> ";
+	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-50' href='$webroot/?missing$qamp' title='Показаны и книги, файлов которых нет в локальном архиве'>Включая отсутствующие</a> ";
 } else {
 	$filter .= "AND EXISTS (SELECT 1 FROM book_available ba WHERE ba.bookid=b.BookId) ";
-	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-90' href='$webroot/?missing=1' title='Скрыты книги, файлов которых нет в локальном архиве'>Только доступные</a> ";
+	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-90' href='$webroot/?missing=1$qamp' title='Скрыты книги, файлов которых нет в локальном архиве'>Только доступные</a> ";
 }
 $fcontent .= '</div>';
 
 if (isset($_SESSION['filter_author'])) {
 	$do_cnt = true;
 	$filter .= 'AND avtorid=:aid ';
+	$params[':aid'] = $_SESSION['filter_author'];
 	$join .= 'LEFT JOIN libavtor a USING(BookId) ';
 	$stmt = $dbh->prepare("SELECT * FROM libavtorname
 		LEFT JOIN libapics USING(AvtorId)
@@ -111,11 +117,12 @@ if (isset($_SESSION['filter_author'])) {
 	if ($a->file != '') {
 		$fcontent .= "<img class='rounded-circle contact' src='$webroot/extract_author.php?id=$a->avtorid' />";
 	}
-	$fcontent .= "<a href='$webroot/?aid'>$a->lastname $a->firstname $a->middlename $a->nickname</a> <i class='fas fa-times-circle'></i></div> ";
+	$fcontent .= "<a href='$webroot/?aid$qamp'>$a->lastname $a->firstname $a->middlename $a->nickname</a> <i class='fas fa-times-circle'></i></div> ";
 }
 
 if (isset($_SESSION['filter_genre'])) {
 	$filter .= 'AND g.genreid=:gid ';
+	$params[':gid'] = $_SESSION['filter_genre'];
 	$join .= 'LEFT JOIN libgenre g USING(BookId) ';
 	$stmt = $dbh->prepare("SELECT * FROM libgenrelist
 		WHERE genreid=:id");
@@ -124,11 +131,12 @@ if (isset($_SESSION['filter_genre'])) {
 	$g = $stmt->fetch();
 
 	$fcontent .= "<div class='badge bg-success p-1 text-white'>";
-	$fcontent .= "<a class='text-white' href='$webroot/?xgid=$g->genreid'>$g->genremeta: $g->genredesc <i class='fas fa-times-circle'></i></a></div> ";
+	$fcontent .= "<a class='text-white' href='$webroot/?xgid=$g->genreid$qamp'>$g->genremeta: $g->genredesc <i class='fas fa-times-circle'></i></a></div> ";
 }
 
 if (isset($_SESSION['filter_xgenre'])) {
-	$filter .= 'AND (SELECT COUNT(*) FROM libgenre xg WHERE xg.BookId=B.BookId AND xg.genreid=:xgid) = 0';
+	$filter .= 'AND NOT EXISTS (SELECT 1 FROM libgenre xg WHERE xg.BookId=b.BookId AND xg.genreid=:xgid) ';
+	$params[':xgid'] = $_SESSION['filter_xgenre'];
 	$stmt = $dbh->prepare("SELECT * FROM libgenrelist
 		WHERE genreid=:id");
 	$stmt->bindParam(":id", $_SESSION['filter_xgenre']);
@@ -136,7 +144,7 @@ if (isset($_SESSION['filter_xgenre'])) {
 	$xg = $stmt->fetch();
 
 	$fcontent .= "<div class='badge bg-secondary p-1 text-white'>";
-	$fcontent .= "<a style='text-decoration: line-through;' class='text-white' href='$webroot/?xgid'>$xg->genremeta: $xg->genredesc <i class='fas fa-times-circle'></i></a></div> ";
+	$fcontent .= "<a style='text-decoration: line-through;' class='text-white' href='$webroot/?xgid$qamp'>$xg->genremeta: $xg->genredesc <i class='fas fa-times-circle'></i></a></div> ";
 }
 
 
@@ -144,6 +152,7 @@ if (isset($_SESSION['filter_series'])) {
 	$do_cnt = true;
 	$cols = 's.seqnumb,';
 	$filter .= 'AND seqid=:sid ';
+	$params[':sid'] = $_SESSION['filter_series'];
 	$join .= 'LEFT JOIN libseq s USING(BookId) ';
 	$stmt = $dbh->prepare("SELECT * FROM libseqname
 		WHERE seqid=:id");
@@ -152,22 +161,22 @@ if (isset($_SESSION['filter_series'])) {
 	$s = $stmt->fetch();
 
 	$fcontent .= "<div class='badge bg-danger p-1 text-white'>";
-	$fcontent .= "<a class='text-white' href='$webroot/?sid'>$s->seqname <i class='fas fa-times-circle'></i></a></div> ";
+	$fcontent .= "<a class='text-white' href='$webroot/?sid$qamp'>$s->seqname <i class='fas fa-times-circle'></i></a></div> ";
 	$order = "s.seqnumb, $order";
 	$seqname = $s->seqname;
 	$seqid = $_SESSION['filter_series'];
 }
 
-if (isset($_SESSION['search'])) {
-	$filter .= "AND vector @@ websearch_to_tsquery('russian', :search) ";
-	$join .= 'LEFT JOIN libbook_ts USING(bookid) ';
+if ($search_tsq !== null) {
+	$filter .= "AND ts.vector @@ sq.query ";
+	$join .= "JOIN libbook_ts ts USING(bookid) CROSS JOIN (SELECT $search_tsq AS query) sq ";
 
 	$fcontent .= "<div class='badge bg-success p-1 text-white'>";
-	$fcontent .= "<a class='text-white' href='$webroot/?q'>" . htmlspecialchars($_SESSION['search']) . " <i class='fas fa-times-circle'></i></a></div> ";
+	$fcontent .= "<a class='text-white' href='$webroot/'>" . htmlspecialchars($search) . " <i class='fas fa-times-circle'></i></a></div> ";
 }
 
 if (isset($_SESSION['filter_series'])) {
-	$fcontent .= "<a class='btn btn-sm btn-info float-end' href='$webroot/?fav_seq=$seqid'>$seqname в Избранное</a> ";
+	$fcontent .= "<a class='btn btn-sm btn-info float-end' href='$webroot/?fav_seq=$seqid$qamp'>$seqname в Избранное</a> ";
 }
 
 echo "<div class='block rounded' style='margin-bottom:8px;'>";
@@ -175,7 +184,7 @@ echo "<form action='$webroot/'>";
 ?>
 
 <div class="input-group mb-3">
-   <input name="q" type="text" class="form-control" placeholder="Поиск по названию" aria-label="Поиск серии" aria-describedby="basic-addon2">
+   <input name="q" type="search" class="form-control" placeholder="Название, автор или серия" aria-label="Поиск книг" aria-describedby="basic-addon2" value="<?php echo htmlspecialchars($search); ?>">
    <div class="input-group-append">
    <input type='submit' class="btn btn-outline-secondary" value='Поиск' type="button">
 
@@ -188,7 +197,7 @@ echo $fcontent;
 echo "</div>";
 
 
-$sql = "SELECT *, $cols
+$sql = "SELECT b.*, $cols
         (SELECT Body FROM libbannotations WHERE BookId=b.BookId LIMIT 1) Body
 		FROM libbook b
 		$join
@@ -200,25 +209,8 @@ $sql = "SELECT *, $cols
 
 $stmt = $dbh->prepare($sql);
 
-if (isset($_SESSION['filter_author'])) {
-	$stmt->bindParam(":aid", $_SESSION['filter_author']);
-}
-if (isset($_SESSION['filter_genre'])) {
-	$stmt->bindParam(":gid", $_SESSION['filter_genre']);
-}
-if (isset($_SESSION['filter_xgenre'])) {
-	$stmt->bindParam(":xgid", $_SESSION['filter_xgenre']);
-}
-if (isset($_SESSION['filter_series'])) {
-	$stmt->bindParam(":sid", $_SESSION['filter_series']);
-}
-if (isset($_SESSION['search'])) {
-	$stmt->bindParam(":search", $_SESSION['search']);
-}
-
-
 try {
-	$stmt->execute();
+	$stmt->execute($params + $order_params);
 } catch (Exception $e) {
 	$protocol = (isset($_SERVER['SERVER_PROTOCOL']) ? $_SERVER['SERVER_PROTOCOL'] : 'HTTP/1.0');
         header($protocol . ' 504 Gateway Time-out');
@@ -236,24 +228,7 @@ if (COUNT_BOOKS) {
 		WHERE deleted='0'
 		$filter";
 	$stt = $dbh->prepare($sql);
-
-	if (isset($_SESSION['filter_author'])) {
-		$stt->bindParam(":aid", $_SESSION['filter_author']);
-	}
-	if (isset($_SESSION['filter_genre'])) {
-		$stt->bindParam(":gid", $_SESSION['filter_genre']);
-	}
-	if (isset($_SESSION['filter_xgenre'])) {
-		$stt->bindParam(":xgid", $_SESSION['filter_xgenre']);
-	}
-	if (isset($_SESSION['filter_series'])) {
-		$stt->bindParam(":sid", $_SESSION['filter_series']);
-	}
-	if (isset($_SESSION['search'])) {
-		$stt->bindParam(":search", $_SESSION['search']);
-	}
-
-	$stt->execute();
+	$stt->execute($params);
 	$cnt = $stt->fetch()->cnt;
 	echo "<span class='badge bg-primary mb-1'>Найдено: $cnt</span> ";
 } else {
@@ -263,6 +238,30 @@ if (COUNT_BOOKS) {
 $rcnt = $stmt->rowCount();
 if ($rcnt < RECORDS_PAGE) {
 	$cnt = $page * RECORDS_PAGE + $rcnt;
+}
+
+if ($search_tsq !== null && $rcnt == 0 && $page == 0) {
+	// Ничего не нашлось: проверяем, не скрыли ли книги фильтры, и подсказываем похожее
+	$filtered = isset($_SESSION['fb2']) || isset($_SESSION['ru']) || !isset($_SESSION['show_missing'])
+		|| isset($_SESSION['filter_author']) || isset($_SESSION['filter_genre'])
+		|| isset($_SESSION['filter_xgenre']) || isset($_SESSION['filter_series']);
+	$hidden = 0;
+	if ($filtered) {
+		$search_params = [];
+		$tsq = search_tsquery_sql($search, $search_params);
+		$stt = $dbh->prepare("SELECT COUNT(*) cnt FROM libbook b
+			JOIN libbook_ts ts USING(bookid) CROSS JOIN (SELECT $tsq AS query) sq
+			WHERE deleted='0' AND ts.vector @@ sq.query");
+		$stt->execute($search_params);
+		$hidden = $stt->fetch()->cnt;
+	}
+	if ($hidden > 0) {
+		echo "<div class='alert alert-warning mt-2'>По запросу «" . htmlspecialchars($search) . "» есть книги ($hidden), но их скрывают фильтры. ";
+		echo "<a href='$webroot/?fb2&amp;ru&amp;missing=1&amp;aid&amp;gid&amp;xgid&amp;sid$qamp'>Сбросить фильтры</a></div>";
+	} else {
+		echo "<div class='alert alert-secondary mt-2'>По запросу «" . htmlspecialchars($search) . "» ничего не найдено.</div>";
+		echo search_suggestions_html($dbh, $search, $webroot);
+	}
 }
 
 show_gpager(ceil($cnt / RECORDS_PAGE), 5);

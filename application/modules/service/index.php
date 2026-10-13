@@ -58,6 +58,11 @@ if (!$status_import) {
 		$status_fetch = true;
 		header("location:$webroot/service/");
 	}
+	if (isset($_GET['vectors'])) {
+		shell_exec('stdbuf -o0 /application/tools/app_update_vectors.sh 2>/dev/null >/dev/null &');
+		$status_fetch = true;
+		header("location:$webroot/service/");
+	}
 	if (isset($_GET['reindex'])) {
 		shell_exec('stdbuf -o0 /application/tools/app_reindex.sh 2>/dev/null >/dev/null &');
 		$status_fetch = true;
@@ -74,6 +79,7 @@ echo "<div class='d-flex justify-content-between'>";
 echo "<a class='btn btn-primary m-1 $status' href='?import=sql'>Обновить базу</a> ";
 echo "<a class='btn btn-warning m-1' href='?empty=cache'>Очистить кэш</a> ";
 echo "<a class='btn btn-warning m-1' href='?reindex'>Сканирование ZIP</a> ";
+echo "<a class='btn btn-warning m-1 $status' href='?vectors'>Поисковый индекс</a> ";
 echo "</div>";
 
 if ($status_import) {
