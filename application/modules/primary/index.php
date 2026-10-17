@@ -27,11 +27,32 @@ $search = trim($_GET['q'] ?? '');
 $params = [];
 $order_params = [];
 $search_tsq = search_tsquery_sql($search, $params);
-if ($search_tsq !== null && !isset($_GET['sort'])) {
-	$order = search_books_order_sql($search, $order_params);
+
+// Сортировка. Без параметра sort: при поиске — по релевантности, иначе — новые поступления
+$sort_modes = [
+	'date' => ['Новые поступления', 'b.Time DESC'],
+	'abc' => ['По названию', 'b.Title, b.BookId'],
+	'year' => ['По году издания', 'NULLIF(b.Year, 0) DESC NULLS LAST, b.Time DESC'],
+];
+if (db_has_table('book_rating')) {
+	$sort_modes['rating'] = ['По рейтингу', 'r.score DESC NULLS LAST, r.bookid DESC'];
 }
-// дописывается к ссылкам фильтров, чтобы переключение фильтра не сбрасывало поиск
-$qamp = $search !== '' ? '&amp;q=' . urlencode($search) : '';
+$sort_mode = $_GET['sort'] ?? '';
+if (!isset($sort_modes[$sort_mode])) {
+	$sort_mode = '';
+}
+$order_join = '';
+if ($sort_mode === '' && $search_tsq !== null) {
+	$order = search_books_order_sql($search, $order_params);
+} else {
+	$order = $sort_modes[$sort_mode ?: 'date'][1];
+	if ($sort_mode === 'rating') {
+		// в book_rating есть строки для всех книг, обычный JOIN позволяет идти по индексу
+		$order_join = 'JOIN book_rating r ON r.bookid=b.BookId ';
+	}
+}
+// дописывается к ссылкам фильтров, чтобы переключение фильтра не сбрасывало поиск и сортировку
+$qamp = keep_params_amp();
 
 if (isset($_GET['aid'])) {
 	if ($_GET['aid'] == '') {
@@ -41,6 +62,14 @@ if (isset($_GET['aid'])) {
 	}
 }
 
+
+if (isset($_GET['tid'])) {
+	if ($_GET['tid'] == '') {
+		unset($_SESSION['filter_translator']);
+	} else {
+		$_SESSION['filter_translator'] = intval($_GET['tid']);
+	}
+}
 
 if (isset($_GET['gid'])) {
 	if ($_GET['gid'] == '') {
@@ -120,6 +149,17 @@ if (isset($_SESSION['filter_author'])) {
 	$fcontent .= "<a href='$webroot/?aid$qamp'>$a->lastname $a->firstname $a->middlename $a->nickname</a> <i class='fas fa-times-circle'></i></div> ";
 }
 
+if (isset($_SESSION['filter_translator'])) {
+	$filter .= 'AND EXISTS (SELECT 1 FROM libtranslator t WHERE t.bookid=b.BookId AND t.translatorid=:tid) ';
+	$params[':tid'] = $_SESSION['filter_translator'];
+	$stmt = $dbh->prepare("SELECT * FROM libavtorname WHERE AvtorId=:id");
+	$stmt->execute([':id' => $_SESSION['filter_translator']]);
+	$t = $stmt->fetch();
+
+	$fcontent .= "<div class='badge rounded-pill author'>";
+	$fcontent .= "<a href='$webroot/?tid$qamp'>Перевод: " . ($t ? "$t->firstname $t->middlename $t->lastname $t->nickname" : $_SESSION['filter_translator']) . "</a> <i class='fas fa-times-circle'></i></div> ";
+}
+
 if (isset($_SESSION['filter_genre'])) {
 	$filter .= 'AND g.genreid=:gid ';
 	$params[':gid'] = $_SESSION['filter_genre'];
@@ -162,7 +202,10 @@ if (isset($_SESSION['filter_series'])) {
 
 	$fcontent .= "<div class='badge bg-danger p-1 text-white'>";
 	$fcontent .= "<a class='text-white' href='$webroot/?sid$qamp'>$s->seqname <i class='fas fa-times-circle'></i></a></div> ";
-	$order = "s.seqnumb, $order";
+	// внутри серии по умолчанию — по номеру книги в серии
+	if ($sort_mode === '') {
+		$order = "s.seqnumb, $order";
+	}
 	$seqname = $s->seqname;
 	$seqid = $_SESSION['filter_series'];
 }
@@ -172,12 +215,32 @@ if ($search_tsq !== null) {
 	$join .= "JOIN libbook_ts ts USING(bookid) CROSS JOIN (SELECT $search_tsq AS query) sq ";
 
 	$fcontent .= "<div class='badge bg-success p-1 text-white'>";
-	$fcontent .= "<a class='text-white' href='$webroot/'>" . htmlspecialchars($search) . " <i class='fas fa-times-circle'></i></a></div> ";
+	$fcontent .= "<a class='text-white' href='$webroot/" . ($sort_mode !== '' ? "?sort=$sort_mode" : '') . "'>" . htmlspecialchars($search) . " <i class='fas fa-times-circle'></i></a></div> ";
 }
 
-if (isset($_SESSION['filter_series'])) {
-	$fcontent .= "<a class='btn btn-sm btn-info float-end' href='$webroot/?fav_seq=$seqid$qamp'>$seqname в Избранное</a> ";
+if (isset($_SESSION['filter_series']) && $user_uuid != '') {
+	$heart = "<i class='fas fa-heart'></i>";
+	$fcontent .= fav_link('seq', $seqid, fav_is($user_uuid, 'seq', $seqid), 'btn btn-sm float-end',
+		['btn-primary', "$heart Серия в избранном"], ['btn-info', "$heart Серию в избранное"], 'Серия в избранное');
 }
+
+// выбор сортировки
+$sort_items = $search_tsq !== null ? ['' => 'По релевантности'] : [];
+foreach ($sort_modes as $k => $m) {
+	$sort_items[$k] = $m[0];
+}
+$sort_current = ($sort_mode === '' && $search_tsq === null) ? 'date' : $sort_mode;
+$sort_q = $search !== '' ? '&amp;q=' . urlencode($search) : '';
+$fcontent .= "<div class='btn-group mt-1 me-1'>";
+$fcontent .= "<button type='button' class='btn btn-outline-secondary dropdown-toggle' data-bs-toggle='dropdown' aria-expanded='false' title='Сортировка'>";
+$fcontent .= "<i class='fas fa-sort-amount-down'></i> {$sort_items[$sort_current]}</button>";
+$fcontent .= "<ul class='dropdown-menu'>";
+foreach ($sort_items as $k => $label) {
+	$active = $k === $sort_current ? ' active' : '';
+	$href = $k === '' ? "$webroot/?q=" . urlencode($search) : "$webroot/?sort=$k$sort_q";
+	$fcontent .= "<li><a class='dropdown-item$active' href='$href'>$label</a></li>";
+}
+$fcontent .= "</ul></div>";
 
 echo "<div class='block rounded' style='margin-bottom:8px;'>";
 echo "<form action='$webroot/'>";
@@ -201,6 +264,7 @@ $sql = "SELECT b.*, $cols
         (SELECT Body FROM libbannotations WHERE BookId=b.BookId LIMIT 1) Body
 		FROM libbook b
 		$join
+		$order_join
 		WHERE deleted='0'
 		$filter
 		ORDER BY $order LIMIT " . RECORDS_PAGE . " OFFSET $start";
@@ -244,7 +308,8 @@ if ($search_tsq !== null && $rcnt == 0 && $page == 0) {
 	// Ничего не нашлось: проверяем, не скрыли ли книги фильтры, и подсказываем похожее
 	$filtered = isset($_SESSION['fb2']) || isset($_SESSION['ru']) || !isset($_SESSION['show_missing'])
 		|| isset($_SESSION['filter_author']) || isset($_SESSION['filter_genre'])
-		|| isset($_SESSION['filter_xgenre']) || isset($_SESSION['filter_series']);
+		|| isset($_SESSION['filter_xgenre']) || isset($_SESSION['filter_series'])
+		|| isset($_SESSION['filter_translator']);
 	$hidden = 0;
 	if ($filtered) {
 		$search_params = [];
@@ -257,7 +322,7 @@ if ($search_tsq !== null && $rcnt == 0 && $page == 0) {
 	}
 	if ($hidden > 0) {
 		echo "<div class='alert alert-warning mt-2'>По запросу «" . htmlspecialchars($search) . "» есть книги ($hidden), но их скрывают фильтры. ";
-		echo "<a href='$webroot/?fb2&amp;ru&amp;missing=1&amp;aid&amp;gid&amp;xgid&amp;sid$qamp'>Сбросить фильтры</a></div>";
+		echo "<a href='$webroot/?fb2&amp;ru&amp;missing=1&amp;aid&amp;tid&amp;gid&amp;xgid&amp;sid$qamp'>Сбросить фильтры</a></div>";
 	} else {
 		echo "<div class='alert alert-secondary mt-2'>По запросу «" . htmlspecialchars($search) . "» ничего не найдено.</div>";
 		echo search_suggestions_html($dbh, $search, $webroot);

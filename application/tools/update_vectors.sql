@@ -1,3 +1,6 @@
+-- Производные таблицы: полнотекстовые индексы для поиска (ниже),
+-- рейтинги и рекомендации читателей (в конце файла).
+--
 -- Полнотекстовые индексы для поиска.
 -- Каждый текст индексируется дважды: конфигурацией russian (словоформы:
 -- «маргариты» найдёт «Маргарита») и simple (слова как есть: стоп-слова вроде
@@ -75,3 +78,63 @@ CREATE INDEX IF NOT EXISTS i_avtorname_trgm ON libavtorname
 ANALYZE libbook_ts;
 ANALYZE libavtorname_ts;
 ANALYZE libseqname_ts;
+
+-- Рейтинги и рекомендации читателей Флибусты (librate, librecs).
+-- Оценки и рекомендации старых редакций переносятся на книгу, которой их
+-- заменили (libjoinedbooks.realid — конец цепочки замен). Если читатель
+-- оценил несколько редакций одной книги, учитывается последняя оценка.
+-- В book_rating есть строка для каждой книги (у неоценённых votes=0 и
+-- score NULL), чтобы сортировка по рейтингу шла по индексу, а не сортировала
+-- весь каталог.
+CREATE TABLE IF NOT EXISTS book_rating (
+	bookid bigint PRIMARY KEY,
+	votes integer NOT NULL,
+	rating real,
+	-- байесовская оценка для сортировки: книга с одной пятёркой
+	-- не обгоняет книгу с сотней оценок в среднем 4,8
+	score real
+);
+CREATE INDEX IF NOT EXISTS i_book_rating_score ON book_rating (score DESC NULLS LAST, bookid DESC);
+
+CREATE TABLE IF NOT EXISTS book_recs (
+	bookid bigint NOT NULL,
+	uid bigint NOT NULL,
+	PRIMARY KEY (bookid, uid)
+);
+CREATE INDEX IF NOT EXISTS i_book_recs_uid ON book_recs (uid);
+
+BEGIN;
+DELETE FROM book_rating;
+WITH v AS (
+	SELECT DISTINCT ON (m.bookid, r.userid) m.bookid, r.rate::text::int rate
+	FROM librate r
+	LEFT JOIN libjoinedbooks j ON j.badid=r.bookid
+	CROSS JOIN LATERAL (SELECT COALESCE(j.realid, r.bookid) bookid) m
+	WHERE r.rate BETWEEN '1' AND '5'
+	ORDER BY m.bookid, r.userid, r.id DESC
+), b AS (
+	SELECT bookid, COUNT(*) votes, AVG(rate) rating FROM v GROUP BY bookid
+), c AS (
+	-- среднее по всей библиотеке и «вес» априорной оценки в голосах
+	SELECT AVG(rate) mean, 10 m FROM v
+)
+INSERT INTO book_rating (bookid, votes, rating, score)
+SELECT bk.bookid, COALESCE(b.votes, 0), b.rating, (b.votes * b.rating + c.m * c.mean) / (b.votes + c.m)
+FROM libbook bk
+LEFT JOIN b USING(bookid)
+CROSS JOIN c
+WHERE bk.deleted='0';
+
+DELETE FROM book_recs;
+INSERT INTO book_recs (bookid, uid)
+SELECT DISTINCT COALESCE(j.realid, r.bid), r.uid
+FROM librecs r
+LEFT JOIN libjoinedbooks j ON j.badid=r.bid
+WHERE r.bid IS NOT NULL AND r.uid IS NOT NULL;
+COMMIT;
+
+-- сортировка по году издания (без года — в конце)
+CREATE INDEX IF NOT EXISTS i_book_year_time ON libbook ((NULLIF(year, 0)) DESC NULLS LAST, time DESC);
+
+ANALYZE book_rating;
+ANALYZE book_recs;

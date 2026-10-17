@@ -1,6 +1,6 @@
 <?php
 error_reporting(E_ALL);
-include('../dbinit.php');
+include(__DIR__ . '/../dbinit.php');
 
 if ($handle = opendir('/application/flibusta')) {
 	$dbh->beginTransaction();

@@ -22,6 +22,8 @@ echo <<< __HTML
 
 <link href="$webroot/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <script src="$webroot/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script>var FAV_URL = '$webroot/fav.php';</script>
+<script src="$webroot/js/fav.js" defer></script>
 
 <link rel="icon" href="$webroot/favicon.svg" sizes="any" type="image/svg+xml">
 
@@ -58,34 +60,14 @@ __HTML
 
 </head>
 <?php
-$c1 = '';
-$c2 = '';
-$c3 = '';
-$c4 = '';
-$c5 = '';
-$c6 = '';
-
-switch ($url->mod) {
-	case '':
-		$c1 = 'active';
-		break;
-	case 'genres':
-		$c2 = 'active';
-		break;
-	case 'genres':
-		$c3 = 'active';
-		break;
-	case 'authors':
-		$c4 = 'active';
-		break;
-	case 'fav':
-		$c5 = 'active';
-		break;
-	case 'service':
-		$c6 = 'active';
-		break;
-	default:
-		$c1 = 'active';
+// активный пункт меню; страницы книги и автора относятся к разделам «Книги» и «Авторы»
+$menu_mod = [
+	'genres' => 'genres', 'authors' => 'authors', 'author' => 'authors',
+	'series' => 'series', 'fav' => 'fav', 'favlist' => 'fav', 'service' => 'service',
+][$url->mod] ?? 'primary';
+$menu = [];
+foreach (['primary', 'genres', 'authors', 'series', 'fav', 'service'] as $m) {
+	$menu[$m] = $m === $menu_mod ? 'active' : '';
 }
 
 
@@ -101,12 +83,12 @@ echo <<< __HTML
    &nbsp;Библиотека
   </a>
 		<ul class="navbar-nav mr-auto">
-			<li class="nav-item $c1"><a title="" class="nav-link" href="$webroot/">Книги</a></li>
-			<li class="nav-item $c2"><a title="" class="nav-link" href="$webroot/genres/">Жанры</a></li>
-			<li class="nav-item $c4"><a title="" class="nav-link" href="$webroot/authors/">Авторы</a></li>
-			<li class="nav-item $c3"><a title="" class="nav-link" href="$webroot/series/">Серии</a></li>
-			<li class="nav-item $c5"><a title="" class="nav-link" href="$webroot/fav/">Полка</a></li>
-			<li class="nav-item $c6"><a title="" class="nav-link" href="$webroot/service/">Сервис</a></li>
+			<li class="nav-item"><a title="" class='nav-link {$menu['primary']}' href="$webroot/">Книги</a></li>
+			<li class="nav-item"><a title="" class='nav-link {$menu['genres']}' href="$webroot/genres/">Жанры</a></li>
+			<li class="nav-item"><a title="" class='nav-link {$menu['authors']}' href="$webroot/authors/">Авторы</a></li>
+			<li class="nav-item"><a title="" class='nav-link {$menu['series']}' href="$webroot/series/">Серии</a></li>
+			<li class="nav-item"><a title="" class='nav-link {$menu['fav']}' href="$webroot/fav/">Полка</a></li>
+			<li class="nav-item"><a title="" class='nav-link {$menu['service']}' href="$webroot/service/">Сервис</a></li>
 		</ul>
 
 <div class="d-flex">

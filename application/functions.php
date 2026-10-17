@@ -32,11 +32,8 @@ function show_gpager($page_count, $block_size = 100) {
 	} else {
 		$page = 0;
 	}
-	// поисковый запрос живёт в URL, его нужно сохранять при листании
-	$extra = '';
-	if (isset($_GET['q']) && trim($_GET['q']) !== '') {
-		$extra = '&amp;q=' . urlencode(trim($_GET['q']));
-	}
+	// поисковый запрос и сортировка живут в URL, их нужно сохранять при листании
+	$extra = keep_params_amp();
 	if ($page_count > 1) {
 		echo "<nav><ul class='pagination pagination-sm'>";
 
@@ -113,6 +110,158 @@ function is_book_available($bookid) {
 	return $stmt->fetchColumn() !== false;
 }
 
+// Параметры адреса, которые сохраняются при листании, переключении фильтров
+// и добавлении в избранное: поисковый запрос и сортировка. Остальные фильтры
+// хранятся в сессии. Возвращает строку вида "&amp;q=...&amp;sort=...".
+function keep_params_amp($with_page = false) {
+	$keys = ['q', 'sort'];
+	if ($with_page) {
+		$keys[] = 'page';
+	}
+	$s = '';
+	foreach ($keys as $k) {
+		$v = trim($_GET[$k] ?? '');
+		if ($v !== '') {
+			$s .= "&amp;$k=" . urlencode($v);
+		}
+	}
+	return $s;
+}
+
+function db_has_table($name) {
+	global $dbh;
+	static $cache = [];
+	if (!isset($cache[$name])) {
+		$stmt = $dbh->prepare("SELECT to_regclass(:name) IS NOT NULL");
+		$stmt->execute([':name' => $name]);
+		$cache[$name] = (bool)$stmt->fetchColumn();
+	}
+	return $cache[$name];
+}
+
+/***************************************************************************/
+// Избранное: книги, авторы и серии в таблице fav
+
+const FAV_COLUMNS = ['book' => 'bookid', 'author' => 'avtorid', 'seq' => 'seqid'];
+
+function fav_is($uuid, $type, $id) {
+	global $dbh;
+	if ($uuid == '') {
+		return false;
+	}
+	$col = FAV_COLUMNS[$type];
+	$stmt = $dbh->prepare("SELECT 1 FROM fav WHERE user_uuid=:uuid AND $col=:id LIMIT 1");
+	$stmt->execute([':uuid' => $uuid, ':id' => $id]);
+	return $stmt->fetchColumn() !== false;
+}
+
+function fav_set($uuid, $type, $id, $on) {
+	global $dbh;
+	$col = FAV_COLUMNS[$type];
+	// уникальный индекс по (user_uuid, bookid, avtorid, seqid) не ловит дубли
+	// из-за NULL в остальных колонках, поэтому сначала удаляем
+	$st = $dbh->prepare("DELETE FROM fav WHERE user_uuid=:uuid AND $col=:id");
+	$st->execute([':uuid' => $uuid, ':id' => $id]);
+	if ($on) {
+		$st = $dbh->prepare("INSERT INTO fav (user_uuid, $col) VALUES (:uuid, :id)");
+		$st->execute([':uuid' => $uuid, ':id' => $id]);
+	}
+}
+
+// Кнопка «в избранное». Без JS это обычная ссылка на текущую страницу
+// (с сохранением поиска, сортировки и номера страницы), с JS — запрос
+// к fav.php без перезагрузки (public/js/fav.js).
+// $on и $off — пары [css-класс, html] для состояний «в избранном» и «нет».
+function fav_link($type, $id, $is_fav, $class, $on, $off, $title = 'В избранное') {
+	$param = ($is_fav ? 'unfav_' : 'fav_') . $type;
+	$href = "?$param=$id" . keep_params_amp(true);
+	[$cls, $html] = $is_fav ? $on : $off;
+	$attr = fn($s) => htmlspecialchars($s, ENT_QUOTES);
+	return "<a href='$href' title='" . $attr($title) . "' class='$class $cls'"
+		. " data-fav-type='$type' data-fav-id='$id' data-fav='" . ($is_fav ? 1 : 0) . "'"
+		. " data-on-class='" . $attr($on[0]) . "' data-off-class='" . $attr($off[0]) . "'"
+		. " data-on-html='" . $attr($on[1]) . "' data-off-html='" . $attr($off[1]) . "'>$html</a>";
+}
+
+function fav_book_link($bookid) {
+	global $user_uuid;
+	if ($user_uuid == '') {
+		return '';
+	}
+	$heart = "<i class='fas fa-heart'></i>";
+	return fav_link('book', $bookid, fav_is($user_uuid, 'book', $bookid), 'btn btn-sm',
+		['btn-primary', $heart], ['btn-outline-secondary', $heart]);
+}
+
+/***************************************************************************/
+// Рейтинг книги по оценкам читателей Флибусты (таблица book_rating
+// собирается из librate в tools/update_vectors.sql)
+
+function book_rating($bookid) {
+	global $dbh;
+	static $stmt = null;
+	if (!db_has_table('book_rating')) {
+		return null;
+	}
+	if ($stmt === null) {
+		$stmt = $dbh->prepare("SELECT votes, rating FROM book_rating WHERE bookid=:id");
+	}
+	$stmt->execute([':id' => $bookid]);
+	$r = $stmt->fetch();
+	return ($r && $r->votes > 0) ? $r : null;
+}
+
+function plural_ru($n, $one, $few, $many) {
+	$n = abs($n) % 100;
+	if ($n >= 11 && $n <= 14) {
+		return $many;
+	}
+	return match ($n % 10) {
+		1 => $one,
+		2, 3, 4 => $few,
+		default => $many,
+	};
+}
+
+function rating_html($r, $compact = false) {
+	if (!$r) {
+		return '';
+	}
+	$value = number_format($r->rating, 1, ',', '');
+	$votes = "$r->votes " . plural_ru($r->votes, 'оценка', 'оценки', 'оценок');
+	$title = "Средняя оценка $value из 5, $votes";
+	if ($compact) {
+		return "<div class='rating small w-100' title='$title'><i class='fas fa-star'></i> $value</div>";
+	}
+	return "<div class='rating' title='$title'>" . stars($r->rating) . " $value <span class='text-muted small'>($votes)</span></div>";
+}
+
+/***************************************************************************/
+
+function book_translators($bookid) {
+	global $dbh;
+	$stmt = $dbh->prepare("SELECT t.translatorid, an.lastname, an.firstname, an.middlename, an.nickname
+		FROM libtranslator t
+		JOIN libavtorname an ON an.avtorid=t.translatorid
+		WHERE t.bookid=:id ORDER BY t.pos");
+	$stmt->execute([':id' => $bookid]);
+	return $stmt->fetchAll();
+}
+
+// Книга, которой на Флибусте заменили эту (объединение дублей и редакций).
+// realid — конечная книга цепочки замен.
+function book_replacement($bookid) {
+	global $dbh;
+	static $stmt = null;
+	if ($stmt === null) {
+		$stmt = $dbh->prepare("SELECT b.bookid, b.title FROM libjoinedbooks j
+			JOIN libbook b ON b.bookid=COALESCE(NULLIF(j.realid, 0), j.goodid)
+			WHERE j.badid=:id AND b.bookid<>j.badid AND b.deleted='0' LIMIT 1");
+	}
+	$stmt->execute([':id' => $bookid]);
+	return $stmt->fetch() ?: null;
+}
+
 function convert_menu($book, $webroot = '') {
 	if (trim($book->filetype) != 'fb2') {
 		return '';
@@ -158,20 +307,11 @@ function book_small_pg($book, $webroot='',$full = false) {
 		$year = $dt;
 	}
 
-	$fav = 'btn-outline-secondary';
-	$fav_url = "?fav_book=$book->bookid";
-	if ($user_uuid != '') {
-		$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav WHERE user_uuid=:uuid AND bookid=:id");
-		$stmt->bindParam(":uuid", $user_uuid);
-		$stmt->bindParam(":id", $book->bookid);
-		$stmt->execute();
-		if ($stmt->fetch()->cnt > 0) {
-			$fav = 'btn-primary';
-			$fav_url = "?unfav_book=$book->bookid";
-		}
-	}
-
 	echo "<div>$book->title</div></a>";
+	echo rating_html(book_rating($book->bookid), true);
+	if ($new = book_replacement($book->bookid)) {
+		echo "<a class='badge bg-warning text-dark' href='$webroot/book/view/$new->bookid' title='" . htmlspecialchars($new->title, ENT_QUOTES) . "'>есть новая редакция</a>";
+	}
 	echo "<div class='btn-group w-100 mt-auto' role='group'>";
 	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$year</button>";
 	if (is_book_available($book->bookid)) {
@@ -181,8 +321,7 @@ function book_small_pg($book, $webroot='',$full = false) {
 		echo "<button type='button' class='btn btn-outline-secondary btn-sm' disabled title='Файла нет в локальном архиве'>нет файла</button>";
 	}
 //	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$book->lang</button>";
-	echo "<a href='$fav_url' title='В избранное' type='button' class='btn $fav btn-sm'><i class='fas fa-heart'></i></a>";
-	
+	echo fav_book_link($book->bookid);
 	echo "</div></div></div>\n";
 }
 
@@ -225,20 +364,7 @@ function book_info_pg($book, $webroot = '', $full = false) {
 		echo "<button type='button' class='btn btn-outline-secondary btn-sm' disabled title='Файла нет в локальном архиве'>нет файла</button>";
 	}
 //	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$book->lang</button>";
-	if ($user_uuid != '') {
-		$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav WHERE user_uuid=:uuid AND bookid=:id");
-		$stmt->bindParam(":uuid", $user_uuid);
-		$stmt->bindParam(":id", $book->bookid);
-		$stmt->execute();
-		if ($stmt->fetch()->cnt > 0) {
-			$fav = 'btn-primary';
-			$fav_url = "?unfav_book=$book->bookid";
-		} else {
-			$fav = 'btn-outline-secondary';
-			$fav_url = "?fav_book=$book->bookid";
-		}
-		echo "<a href='$fav_url' title='В избранное' type='button' class='btn $fav btn-sm'><i class='fas fa-heart'></i></a>";
-	}
+	echo fav_book_link($book->bookid);
 	echo "</div>";
 	
 	echo "</div><div class='col-sm-10'>";
@@ -258,6 +384,23 @@ function book_info_pg($book, $webroot = '', $full = false) {
 		echo "</div>";
 	}
 	echo "</div>";
+
+	$translators = book_translators($book->bookid);
+	if ($translators) {
+		echo "<div class='translators-list small'>Перевод: ";
+		$links = [];
+		foreach ($translators as $t) {
+			$links[] = "<a href='$webroot/author/view/$t->translatorid'>" . trim("$t->firstname $t->middlename $t->lastname $t->nickname") . "</a>";
+		}
+		echo implode(', ', $links), "</div>";
+	}
+
+	echo rating_html(book_rating($book->bookid));
+
+	if ($new = book_replacement($book->bookid)) {
+		echo "<div class='alert alert-warning py-1 px-2 my-1 small'>На Флибусте эта книга заменена новой редакцией: ";
+		echo "<a href='$webroot/book/view/$new->bookid'>" . htmlspecialchars($new->title) . "</a></div>";
+	}
 
 
 	echo "<div style='margin-bottom: 3px;'>";
@@ -422,15 +565,13 @@ function transliterate($string){
 }
 
 
-function stars($rating, $webroot) {
-    $fullStar = '<img alt="1" class="star" src="'.$webroot.'/i/s1.png" />';
-    $emptyStar = '<img alt="0" class="star" src="'.$webroot.'/i/s0.png" />';
-    $rating = $rating <= 5?$rating:5;
-    $fullStarCount = (int)$rating;
-    $emptyStarCount = 5 - $fullStarCount;
-    $html = str_repeat($fullStar,$fullStarCount);
-    $html .= str_repeat($emptyStar,$emptyStarCount);
-    echo $html;
+function stars($rating) {
+    $halves = (int)round(min(max($rating, 0), 5) * 2);
+    $full = intdiv($halves, 2);
+    $half = $halves % 2;
+    return str_repeat("<i class='fas fa-star'></i>", $full)
+        . str_repeat("<i class='fas fa-star-half-alt'></i>", $half)
+        . str_repeat("<i class='far fa-star'></i>", 5 - $full - $half);
 }
 
 /***************************************************************************/

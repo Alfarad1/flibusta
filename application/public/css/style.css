@@ -253,3 +253,7 @@ section1 section p {
         padding: 20px;*/
     }
 
+
+.rating .fa-star, .rating .fa-star-half-alt {
+	color: #f0a020;
+}

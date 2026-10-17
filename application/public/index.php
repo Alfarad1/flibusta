@@ -51,72 +51,25 @@ if (isset($_SESSION['user_uuid'])) {
 	if (isset($user->name)) {
 		$user_name = $user->name;
 
-		if (isset($_GET['fav_book'])) {
-			$id = intval($_GET['fav_book']);
-			$st = $dbh->prepare("INSERT INTO fav (user_uuid, bookid) VALUES(:uuid, :id) ON CONFLICT DO NOTHING");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
-		}
-		if (isset($_GET['fav_author'])) {
-			$id = intval($_GET['fav_author']);
-			$st = $dbh->prepare("INSERT INTO fav (user_uuid, avtorid) VALUES(:uuid, :id) ON CONFLICT DO NOTHING");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
-		}
-		if (isset($_GET['fav_seq'])) {
-			$id = intval($_GET['fav_seq']);
-			$st = $dbh->prepare("DELETE FROM fav WHERE user_uuid=:uuid AND seqid=:id");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
-			$st = $dbh->prepare("INSERT INTO fav (user_uuid, seqid) VALUES(:uuid, :id) ON CONFLICT DO NOTHING");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
-		}
-	
-		if (isset($_GET['unfav_book'])) {
-			$id = intval($_GET['unfav_book']);
-			$st = $dbh->prepare("DELETE FROM fav WHERE user_uuid=:uuid AND bookid=:id");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
-		}
-		if (isset($_GET['unfav_author'])) {
-			$id = intval($_GET['unfav_author']);
-			$st = $dbh->prepare("DELETE FROM fav WHERE user_uuid=:uuid AND avtorid=:id");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
-		}
-		if (isset($_GET['unfav_seq'])) {
-			$id = intval($_GET['unfav_seq']);
-			$st = $dbh->prepare("DELETE FROM fav WHERE user_uuid=:uuid AND seqid=:id");
-			$st->bindParam(":uuid", $user_uuid);
-			$st->bindParam(":id", $id);
-			$st->execute();
+		foreach (array_keys(FAV_COLUMNS) as $type) {
+			if (isset($_GET["fav_$type"])) {
+				fav_set($user_uuid, $type, intval($_GET["fav_$type"]), true);
+			}
+			if (isset($_GET["unfav_$type"])) {
+				fav_set($user_uuid, $type, intval($_GET["unfav_$type"]), false);
+			}
 		}
 	} else {
 		unset($_SESSION['user_uuid']);
+		$user_uuid = '';
 		$user_name = 'Книжные полки';
 	}
 } else {
 	$user_uuid = '';
 }
 
-if (isset($_GET['sort'])) {
-	$sort_mode = $_GET['sort'];
-} else {
-	$sort_mode = 'abc';
-	if ($url->action == '') {
-		$sort_mode = 'date';
-	}
-}
-
 if (isset($_GET['page'])) {
-	$page = intval($_GET['page']);
+	$page = max(0, intval($_GET['page']));
 } else {
 	$page = 0;
 }
@@ -124,24 +77,6 @@ if (isset($_GET['page'])) {
 $start = $page * RECORDS_PAGE;
 $lang = 'ru';
 $filter = "";
-
-switch ($sort_mode) {
-	case 'abc':
-		$order = 'b.Title';
-		break;
-
-	case 'author':
-		$order = 'b.Title';
-		break;
-
-	case 'date':
-		$order = 'b.Time DESC';
-		break;
-
-	case 'rating':
-		$order = 'b.Title';
-		break;
-}
 
 if ($url->mod == 'opds') {
 	include(ROOT_PATH . "/opds/index.php");
