@@ -63,8 +63,8 @@ $json = fn($v) => json_encode($v, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_H
 <title><?php echo h($book->title ?? 'Читалка'); ?></title>
 <link rel="icon" href="<?php echo $webroot; ?>/favicon.svg" sizes="any" type="image/svg+xml">
 <link href="<?php echo $webroot; ?>/bootstrap/css/bootstrap.min.css" rel="stylesheet">
-<link href="<?php echo $webroot; ?>/css/all.min.css" rel="stylesheet">
-<link href="<?php echo $webroot; ?>/css/reader.css" rel="stylesheet">
+<link href="<?php echo asset('css/all.min.css'); ?>" rel="stylesheet">
+<link href="<?php echo asset('css/reader.css'); ?>" rel="stylesheet">
 <script>
 // настройки применяются до отрисовки текста, чтобы страница не перестраивалась
 (function () {
@@ -242,7 +242,7 @@ if ($styled) {
 		echo "<script src='$webroot/js/jszip.min.js'></script>\n<script src='$webroot/js/epub.min.js'></script>\n";
 	}
 	echo "<script>var READER = " . $json($config) . ";</script>\n";
-	echo "<script src='$webroot/js/reader.js'></script>\n";
+	echo "<script src='" . asset('js/reader.js') . "'></script>\n";
 }
 ?>
 </body>

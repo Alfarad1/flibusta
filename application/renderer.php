@@ -18,19 +18,20 @@
 	}
 	echo "<title>$title</title>";
 	include_once(ROOT_PATH . 'webroot.php');
+$asset = 'asset';
 echo <<< __HTML
 
 <link href="$webroot/bootstrap/css/bootstrap.min.css" rel="stylesheet">
 <script src="$webroot/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>var FAV_URL = '$webroot/fav.php';</script>
-<script src="$webroot/js/fav.js" defer></script>
+<script src="{$asset('js/fav.js')}" defer></script>
 <script>var MARK_URL = '$webroot/mark.php';</script>
-<script src="$webroot/js/marks.js" defer></script>
+<script src="{$asset('js/marks.js')}" defer></script>
 
 <link rel="icon" href="$webroot/favicon.svg" sizes="any" type="image/svg+xml">
 
-<link href="$webroot/css/all.min.css" rel="stylesheet">
-<link href="$webroot/css/style.css" rel="stylesheet">
+<link href="{$asset('css/all.min.css')}" rel="stylesheet">
+<link href="{$asset('css/style.css')}" rel="stylesheet">
 __HTML
 ?>
 <style>
