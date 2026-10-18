@@ -262,6 +262,83 @@ function book_replacement($bookid) {
 	return $stmt->fetch() ?: null;
 }
 
+// Другие издания той же книги (таблица book_editions собирается
+// в tools/update_vectors.sql): сначала с файлом, потом новые.
+function book_other_editions($bookid) {
+	global $dbh;
+	if (!db_has_table('book_editions')) {
+		return [];
+	}
+	$rating = db_has_table('book_rating');
+	$stmt = $dbh->prepare("SELECT b.bookid, b.title, b.year, b.filetype, b.filesize, b.lang,
+			EXISTS (SELECT 1 FROM book_available ba WHERE ba.bookid=b.bookid) available,
+			(SELECT string_agg(trim(concat_ws(' ', an.firstname, an.lastname, an.nickname)), ', ' ORDER BY t.pos)
+				FROM libtranslator t JOIN libavtorname an ON an.avtorid=t.translatorid
+				WHERE t.bookid=b.bookid) translators,
+			(SELECT string_agg(sn.seqname || CASE WHEN ls.seqnumb>0 THEN ' ' || ls.seqnumb ELSE '' END, '; ')
+				FROM libseq ls JOIN libseqname sn USING(seqid)
+				WHERE ls.bookid=b.bookid) series,
+			" . ($rating ? 'r.votes, r.rating' : 'NULL votes, NULL rating') . "
+		FROM book_editions me
+		JOIN book_editions e ON e.workid=me.workid AND e.bookid<>me.bookid
+		JOIN libbook b ON b.bookid=e.bookid
+		" . ($rating ? 'LEFT JOIN book_rating r ON r.bookid=b.bookid' : '') . "
+		WHERE me.bookid=:id AND b.deleted='0'
+		ORDER BY available DESC, NULLIF(b.year, 0) DESC NULLS LAST, b.bookid DESC");
+	$stmt->execute([':id' => $bookid]);
+	return $stmt->fetchAll();
+}
+
+// Список других изданий: в поиске свёрнут («Ещё 3 издания»), на странице книги раскрыт.
+function editions_html($book, $webroot = '', $open = false) {
+	$list = book_other_editions($book->bookid);
+	if (!$list) {
+		return '';
+	}
+	$n = count($list);
+	$summary = $open ? "Другие издания ($n)"
+		: 'Ещё ' . $n . ' ' . plural_ru($n, 'издание', 'издания', 'изданий');
+	$s = "<details class='editions small my-1'" . ($open ? ' open' : '') . "><summary>$summary</summary><ul class='mb-1'>";
+	$norm = fn($t) => str_replace('ё', 'е', mb_strtolower(trim($t)));
+	foreach ($list as $e) {
+		// ссылка — год, формат и размер; название — только если отличается
+		$link = [];
+		if ($e->year > 0) {
+			$link[] = $e->year;
+		}
+		$link[] = trim($e->filetype);
+		$link[] = $e->filesize >= 1048576
+			? number_format($e->filesize / 1048576, 1, ',', '') . ' МБ'
+			: ceil($e->filesize / 1024) . ' КБ';
+		$parts = [];
+		if ($norm($e->title) !== $norm($book->title)) {
+			$parts[] = '«' . htmlspecialchars($e->title) . '»';
+		}
+		if (trim($e->lang) !== trim($book->lang)) {
+			$parts[] = trim($e->lang);
+		}
+		if ($e->translators) {
+			$parts[] = 'пер. ' . htmlspecialchars($e->translators);
+		}
+		if ($e->series) {
+			$parts[] = htmlspecialchars($e->series);
+		}
+		$s .= "<li><a href='$webroot/book/view/$e->bookid'>" . implode(', ', $link) . "</a>";
+		if ($parts) {
+			$s .= ' — ' . implode(', ', $parts);
+		}
+		if ($e->votes > 0) {
+			$s .= " <span class='rating' title='Средняя оценка, $e->votes " . plural_ru($e->votes, 'оценка', 'оценки', 'оценок') . "'>"
+				. "<i class='fas fa-star'></i> " . number_format($e->rating, 1, ',', '') . "</span>";
+		}
+		if (!$e->available) {
+			$s .= " <span class='text-muted'>(нет файла)</span>";
+		}
+		$s .= "</li>";
+	}
+	return $s . "</ul></details>";
+}
+
 function convert_menu($book, $webroot = '') {
 	if (trim($book->filetype) != 'fb2') {
 		return '';
@@ -436,6 +513,11 @@ function book_info_pg($book, $webroot = '', $full = false) {
 		}
 	}
 	echo "</div>";
+
+	// в результатах поиска editions приходит из запроса, на странице книги список показывается всегда
+	if ($full || ($book->editions ?? 0) > 1) {
+		echo editions_html($book, $webroot, $full);
+	}
 
 	echo "<div style='font-size: 0.8em;'>";
 	if (isset($book->body)) {

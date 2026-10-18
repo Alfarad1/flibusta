@@ -1,5 +1,5 @@
 -- Производные таблицы: полнотекстовые индексы для поиска (ниже),
--- рейтинги и рекомендации читателей (в конце файла).
+-- рейтинги и рекомендации читателей, издания одной книги (в конце файла).
 --
 -- Полнотекстовые индексы для поиска.
 -- Каждый текст индексируется дважды: конфигурацией russian (словоформы:
@@ -133,8 +133,83 @@ LEFT JOIN libjoinedbooks j ON j.badid=r.bid
 WHERE r.bid IS NOT NULL AND r.uid IS NOT NULL;
 COMMIT;
 
+-- Издания одной книги: разные файлы, переиздания и переводы с одинаковым
+-- названием и тем же набором авторов на том же языке. В поиске показывается
+-- одно издание группы, остальные — списком в карточке.
+-- Название сравнивается без регистра, ё, пунктуации и пометок вроде «(сборник)»,
+-- номера томов римскими цифрами приводятся к арабским.
+-- Чтобы не склеить разные книги:
+-- - у названий-заглушек («Том 1», «Стихотворения», «Избранное») должны
+--   совпадать ещё и серии (собрания сочинений разные — и тома разные);
+-- - книги одной серии с разными номерами — разные тома, а не издания.
+-- В таблице только книги, у которых есть другие издания;
+-- workid — наименьший bookid группы.
+CREATE TABLE IF NOT EXISTS book_editions (
+	bookid bigint PRIMARY KEY,
+	workid bigint NOT NULL,
+	editions integer NOT NULL
+);
+CREATE INDEX IF NOT EXISTS i_book_editions_workid ON book_editions (workid);
+
+BEGIN;
+DELETE FROM book_editions;
+WITH a AS (
+	SELECT bookid, string_agg(DISTINCT avtorid::text, ',' ORDER BY avtorid::text) au
+	FROM libavtor GROUP BY bookid
+), s AS (
+	SELECT bookid, string_agg(seqid::text, ',' ORDER BY seqid) seqs
+	FROM libseq GROUP BY bookid
+), n0 AS (
+	SELECT b.bookid, lower(trim(b.lang)) lang, a.au, s.seqs,
+		trim(regexp_replace(
+			regexp_replace(lower(translate(b.title, 'Ёё', 'Ее')),
+				'[\(\[]\s*(сборник|авторский сборник|с иллюстрациями|иллюстрированное издание|litres)\s*[\)\]]\s*$', ''),
+			'[^[:alnum:]]+', ' ', 'g')) t
+	FROM libbook b
+	JOIN a USING(bookid)
+	LEFT JOIN s USING(bookid)
+	WHERE b.deleted='0'
+), n AS (
+	-- «Том II» = «Том 2»
+	SELECT n0.bookid, n0.lang, n0.au, n0.seqs,
+		CASE WHEN r.num IS NULL THEN n0.t ELSE regexp_replace(n0.t, '[ivx]+$', r.num::text) END t
+	FROM n0
+	CROSS JOIN LATERAL (SELECT array_position(ARRAY['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'],
+		substring(n0.t FROM '(?:^| )(?:том|книга|часть) ([ivx]+)$')) num) r
+), k AS (
+	SELECT bookid, md5(concat_ws('|', t, au, lang,
+		CASE WHEN t ~ '^(том|книга|часть|выпуск|т) ?[0-9ivxlc]+$'
+			OR t IN ('избранное', 'избранные произведения', 'избранные сочинения', 'сочинения',
+				'собрание сочинений', 'полное собрание сочинений', 'произведения', 'стихотворения',
+				'стихи', 'стихотворения и поэмы', 'поэмы', 'сказки', 'рассказы', 'повести',
+				'повести и рассказы', 'рассказы и повести', 'басни', 'пьесы', 'статьи', 'письма',
+				'дневники', 'мемуары', 'воспоминания')
+		THEN coalesce(seqs, '') END)) k
+	FROM n
+), multi AS (
+	SELECT k FROM k GROUP BY k HAVING COUNT(*) > 1
+), conflict AS (
+	-- серии, в которых книги группы стоят под разными номерами
+	SELECT k.k, ls.seqid
+	FROM k JOIN multi USING(k) JOIN libseq ls USING(bookid)
+	GROUP BY k.k, ls.seqid
+	HAVING COUNT(DISTINCT ls.seqnumb) > 1
+), vol AS (
+	SELECT k.bookid, string_agg(ls.seqid || ':' || ls.seqnumb, ',' ORDER BY ls.seqid) v
+	FROM k JOIN conflict c USING(k) JOIN libseq ls ON ls.bookid=k.bookid AND ls.seqid=c.seqid
+	GROUP BY k.bookid
+), g AS (
+	SELECT k.bookid, min(k.bookid) OVER w workid, COUNT(*) OVER w editions
+	FROM k JOIN multi USING(k) LEFT JOIN vol USING(bookid)
+	WINDOW w AS (PARTITION BY k.k || coalesce(vol.v, ''))
+)
+INSERT INTO book_editions (bookid, workid, editions)
+SELECT bookid, workid, editions FROM g WHERE editions > 1;
+COMMIT;
+
 -- сортировка по году издания (без года — в конце)
 CREATE INDEX IF NOT EXISTS i_book_year_time ON libbook ((NULLIF(year, 0)) DESC NULLS LAST, time DESC);
 
 ANALYZE book_rating;
 ANALYZE book_recs;
+ANALYZE book_editions;
