@@ -72,6 +72,11 @@ const SCHEMA_MIGRATIONS = [
 			ON CONFLICT DO NOTHING;
 		DELETE FROM fav WHERE bookid IS NOT NULL;
 	",
+	// 3. Позиция чтения, не зависящая от шрифта и размера окна: для FB2 —
+	//    номер абзаца и доля внутри него, для EPUB — CFI. pos — процент прочитанного.
+	3 => "
+		ALTER TABLE progress ADD COLUMN IF NOT EXISTS loc text;
+	",
 ];
 
 function schema_ensure() {

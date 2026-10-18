@@ -31,6 +31,9 @@ $filter = "";
 
 if ($url->mod == 'opds') {
 	include(ROOT_PATH . "/opds/index.php");
+} elseif ($url->mod == 'read') {
+	// читалка — отдельная страница без меню сайта
+	include(ROOT_PATH . "modules/read/index.php");
 } else {
 	include(ROOT_PATH . "renderer.php");
 }

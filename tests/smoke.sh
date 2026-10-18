@@ -49,7 +49,12 @@ favshelf=$(grep -o "/fav/shelf/[0-9]*" "$T/fav" | head -1 | grep -o '[0-9]*$')
 check "у нового пользователя есть «Избранное»" [ -n "$favshelf" ]
 get "$B/fav/shelf/$favshelf" >"$T/shelf"
 check "книга на полке «Избранное»" has "$T/shelf" "data-fav-id='$book'"
-check "позиция чтения сохраняется" [ "$(code -X POST -d "bookid=$book&pos=10" "$B/save_position.php")" = 200 ]
+check "читалка открывается" [ "$(code "$B/read/$book")" = 200 ]
+check "читалка: нет книги — 404" [ "$(code "$B/read/999999999")" = 404 ]
+check "позиция чтения сохраняется" [ "$(code -X POST -d "bookid=$book&pos=10.5&loc=p:12:0.250" "$B/save_position.php")" = 200 ]
+check "после чтения статус «Читаю»" sh -c "curl -s -b '$JAR' '$B/fav/status/2' | grep -q '/book/view/$book'"
+check "на странице книги «Продолжить · 10%»" sh -c "curl -s -b '$JAR' '$B/book/view/$book' | grep -q 'Продолжить чтение · 10%' || ! curl -s -b '$JAR' '$B/book/view/$book' | grep -q '/read/$book'"
+check "позиция передаётся в читалку" sh -c "curl -s -b '$JAR' '$B/read/$book' | grep -q 'Файл\\|p:12:0.250'"
 
 check "создание полки" [ "$(code -X POST --data-urlencode "action=create" --data-urlencode "name=Полка <i>" "$B/fav/")" = 302 ]
 shelf=$(get "$B/fav/" | grep -o "/fav/shelf/[0-9]*" | grep -v "/$favshelf\$" | head -1 | grep -o '[0-9]*$')

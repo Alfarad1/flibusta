@@ -1,0 +1,270 @@
+/* Читалка (/read/<id>): темы, шрифт и ширина задаются атрибутами и переменными на <html> */
+:root {
+	--r-size: 19px;
+	--r-lh: 1.6;
+	--r-width: 40em;
+	--r-font: Georgia, "PT Serif", "Noto Serif", "Times New Roman", serif;
+	--r-bg: #fff;
+	--r-fg: #222;
+	--r-muted: #777;
+	--r-link: #0d6efd;
+	--r-bar: rgba(255, 255, 255, .96);
+	--r-border: #ddd;
+}
+[data-theme="sepia"] {
+	--r-bg: #f4ecd8;
+	--r-fg: #3b2f1e;
+	--r-muted: #8a7a5e;
+	--r-link: #8a4b0f;
+	--r-bar: rgba(244, 236, 216, .96);
+	--r-border: #dccfae;
+}
+[data-theme="night"] {
+	--r-bg: #1d1f21;
+	--r-fg: #c8c8c8;
+	--r-muted: #888;
+	--r-link: #8ab4f8;
+	--r-bar: rgba(29, 31, 33, .96);
+	--r-border: #3a3d40;
+}
+[data-font="sans"] {
+	--r-font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", Arial, sans-serif;
+}
+[data-width="narrow"] { --r-width: 32em; }
+[data-width="wide"] { --r-width: 52em; }
+[data-width="full"] { --r-width: 100%; }
+
+html, body.reader-page {
+	background: var(--r-bg);
+	color: var(--r-fg);
+}
+/* Bootstrap включает плавную прокрутку: позиция чтения замерялась бы посреди анимации */
+html {
+	scroll-behavior: auto !important;
+}
+body.reader-page {
+	padding-top: 3.5rem;
+}
+
+.reader-bar {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	z-index: 1030;
+	height: 3rem;
+	display: flex;
+	align-items: center;
+	gap: .25rem;
+	padding: 0 .5rem;
+	background: var(--r-bar);
+	border-bottom: 1px solid var(--r-border);
+	transition: transform .2s;
+}
+.reader-bar.hide {
+	transform: translateY(-100%);
+}
+.reader-bar .btn-link {
+	color: var(--r-fg);
+	font-size: 1.1rem;
+}
+.reader-title {
+	flex: 1;
+	min-width: 0;
+	line-height: 1.2;
+}
+
+.reader-text {
+	max-width: var(--r-width);
+	margin: 0 auto;
+	padding: 0 1.25rem;
+	font-family: var(--r-font);
+	font-size: var(--r-size);
+	line-height: var(--r-lh);
+}
+.reader-text p {
+	margin: 0;
+	text-indent: 1.5em;
+}
+[data-align="justify"] .reader-text p {
+	text-align: justify;
+	hyphens: auto;
+	-webkit-hyphens: auto;
+}
+.reader-text a {
+	color: var(--r-link);
+}
+.reader-text .title {
+	text-align: center;
+	font-family: var(--r-font);
+	font-weight: bold;
+	line-height: 1.3;
+	margin: 2em 0 1em;
+	text-indent: 0;
+}
+.reader-text h1.title { font-size: 1.6em; }
+.reader-text h2.title { font-size: 1.4em; }
+.reader-text h3.title { font-size: 1.2em; }
+.reader-text h4.title, .reader-text h5.title, .reader-text h6.title { font-size: 1.05em; }
+.reader-text .subtitle {
+	text-align: center;
+	font-weight: bold;
+	text-indent: 0;
+	margin: 1em 0;
+}
+.reader-text .empty-line {
+	height: 1em;
+}
+.reader-text .epigraph {
+	margin: 1em 0 1.5em auto;
+	max-width: 70%;
+	font-style: italic;
+}
+.reader-text .cite {
+	margin: 1em 2em;
+}
+.reader-text .text-author {
+	text-align: right;
+	font-style: italic;
+	text-indent: 0;
+}
+.reader-text .poem {
+	margin: 1em 0 1em 2em;
+}
+.reader-text .poem p {
+	text-indent: 0;
+	text-align: left;
+}
+.reader-text .poem-title {
+	font-weight: bold;
+}
+.reader-text .stanza {
+	margin-bottom: 1em;
+}
+.reader-text .image, .reader-text .cover-page {
+	text-align: center;
+	margin: 1em 0;
+}
+.reader-text img {
+	max-width: 100%;
+	height: auto;
+}
+.reader-text .cover-page img {
+	/* ширина задана — место под обложку резервируется по пропорциям до её загрузки */
+	width: min(100%, 22em);
+}
+.reader-text img.inline {
+	max-height: 1.5em;
+	vertical-align: middle;
+}
+[data-theme="night"] .reader-text img {
+	opacity: .85;
+}
+.reader-text .table-wrap {
+	overflow-x: auto;
+	margin: 1em 0;
+}
+.reader-text table td, .reader-text table th {
+	border: 1px solid var(--r-border);
+	padding: .2em .5em;
+}
+.reader-text .note-ref {
+	font-size: .75em;
+	vertical-align: super;
+	line-height: 0;
+	text-decoration: none;
+}
+.reader-text .notes {
+	margin-top: 4em;
+	border-top: 1px solid var(--r-border);
+	font-size: .9em;
+}
+.reader-text .note {
+	margin-bottom: 1em;
+}
+.reader-text .note-title {
+	font-weight: bold;
+}
+.reader-end {
+	border-top: 1px solid var(--r-border);
+	margin-top: 3em;
+}
+
+.reader-panel {
+	background: var(--r-bg);
+	color: var(--r-fg);
+}
+[data-theme="night"] .reader-panel .btn-close {
+	filter: invert(1);
+}
+.reader-panel .btn-outline-secondary {
+	color: var(--r-fg);
+}
+.reader-panel .btn-outline-secondary.active {
+	color: #fff;
+}
+.reader-panel .form-control {
+	background: transparent;
+	color: var(--r-fg);
+}
+.toc a {
+	display: block;
+	padding: .3em 0;
+	color: var(--r-fg);
+	text-decoration: none;
+	border-bottom: 1px solid var(--r-border);
+}
+.toc a.current {
+	font-weight: bold;
+	color: var(--r-link);
+}
+.toc .toc-l2 { padding-left: 1em; }
+.toc .toc-l3 { padding-left: 2em; }
+.toc .toc-l4 { padding-left: 3em; }
+
+.note-pop {
+	position: fixed;
+	left: 50%;
+	bottom: 1rem;
+	transform: translateX(-50%);
+	width: min(36em, calc(100% - 2rem));
+	max-height: 45vh;
+	overflow-y: auto;
+	z-index: 1050;
+	padding: 1rem;
+	background: var(--r-bg);
+	color: var(--r-fg);
+	border: 1px solid var(--r-border);
+	border-radius: .5rem;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, .3);
+	font-family: var(--r-font);
+	font-size: calc(var(--r-size) * .9);
+	line-height: var(--r-lh);
+}
+.note-pop[hidden] {
+	display: none;
+}
+[data-theme="night"] .note-pop .btn-close {
+	filter: invert(1);
+}
+.note-pop p {
+	margin: 0 0 .5em;
+}
+
+/* EPUB: epub.js рисует книгу в iframe внутри #epub */
+.reader-epub {
+	max-width: var(--r-width);
+	margin: 0 auto;
+	padding: 0 1rem;
+}
+.reader-epub .epub-container {
+	margin: 0 auto;
+}
+/* прежние просмотрщики (pdf, djvu, mobi…) */
+.reader-other {
+	padding: 0 1rem;
+}
+.reader-other canvas {
+	max-width: 100%;
+	margin: 0 auto 1rem;
+}

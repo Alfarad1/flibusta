@@ -270,6 +270,25 @@ function shelf_books_html($from_sql, $params, $sort, $page) {
 	show_gpager(ceil($cnt / SHELF_PAGE), 5);
 }
 
+// Форматы, которые открываются в читалке (modules/read)
+const READABLE_FORMATS = ['fb2', 'epub', 'txt', 'pdf', 'mobi', 'djvu', 'djv', 'rtf', 'docx', 'html', 'htm'];
+
+// Кнопка «Читать» / «Продолжить» на странице книги
+function read_button($book) {
+	global $dbh, $user_uuid, $webroot;
+	if (!$book || !in_array(strtolower(trim($book->filetype)), READABLE_FORMATS) || !is_book_available($book->bookid)) {
+		return '';
+	}
+	$pos = 0;
+	if ($user_uuid !== '') {
+		$stmt = $dbh->prepare("SELECT pos FROM progress WHERE user_uuid=:u AND bookid=:b");
+		$stmt->execute([':u' => $user_uuid, ':b' => $book->bookid]);
+		$pos = (float)$stmt->fetchColumn();
+	}
+	$label = $pos > 0 ? 'Продолжить чтение · ' . floor($pos) . '%' : 'Читать';
+	return "<div class='mb-3'><a class='btn btn-success btn-lg' href='$webroot/read/$book->bookid'><i class='fas fa-book-reader'></i> $label</a></div>";
+}
+
 // «Продолжить чтение»: книги со статусом «Читаю», последние прочитанные первыми
 function continue_reading($uuid, $limit = 6) {
 	global $dbh;
@@ -294,12 +313,14 @@ function continue_reading_html($uuid, $title = 'Продолжить чтени�
 	}
 	echo "</h5><div class='card-body pb-0'><div class='row equal'>";
 	foreach ($books as $b) {
-		$note = '';
-		if ($b->pos > 0) {
-			$pct = (int)round($b->pos);
-			$note = "<div class='progress mx-1 my-1' style='height: 4px' title='Прочитано $pct%'>"
-				. "<div class='progress-bar bg-success' style='width: $pct%'></div></div>";
+		$pct = (int)floor($b->pos ?? 0);
+		$note = "<div class='w-100 px-1'><div class='progress my-1' style='height: 4px' title='Прочитано $pct%'>"
+			. "<div class='progress-bar bg-success' style='width: $pct%'></div></div>";
+		if (in_array(strtolower(trim($b->filetype)), READABLE_FORMATS)) {
+			$note .= "<a class='btn btn-sm btn-success w-100 mb-1' href='$webroot/read/$b->bookid'><i class='fas fa-book-reader'></i> "
+				. ($pct > 0 ? "Продолжить · $pct%" : 'Читать') . "</a>";
 		}
+		$note .= "</div>";
 		book_small_pg($b, $webroot, false, $note);
 	}
 	echo "</div></div></div>";
