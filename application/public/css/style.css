@@ -91,6 +91,9 @@ h4 {
 
 .cover {
 	box-shadow: 0 .125rem .25rem rgba(0,0,0,.9)!important;
+}
+
+img.cover {
 	max-height: 400px;
 }
 
