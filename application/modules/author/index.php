@@ -13,21 +13,21 @@ echo "<div class='col-sm-2 mb-3'>";
 if (isset($a->file)) {
 	echo "<img src='$webroot/extract_author.php?id=$a->avtorid' style='width: 100%;' class='card-image' /><br />";	
 }
-echo "<a class='btn btn-primary mt-2 w-100' href='$webroot/?aid=$a->avtorid'>Книги автора</a>";
+$stmt = $dbh->prepare("SELECT
+	(SELECT COUNT(*) FROM libavtor a JOIN libbook b USING(bookid) WHERE a.avtorid=:id AND b.deleted='0') books,
+	(SELECT COUNT(*) FROM libtranslator t JOIN libbook b USING(bookid) WHERE t.translatorid=:id AND b.deleted='0') translations");
+$stmt->execute([':id' => $a->avtorid]);
+$cnt = $stmt->fetch();
+if ($cnt->books > 0 || $cnt->translations == 0) {
+	echo "<a class='btn btn-primary mt-2 w-100' href='$webroot/?aid=$a->avtorid&amp;tid'>Книги автора <span class='badge bg-light text-dark'>$cnt->books</span></a>";
+}
+if ($cnt->translations > 0) {
+	echo "<a class='btn btn-outline-primary mt-2 w-100' href='$webroot/?tid=$a->avtorid&amp;aid'>Переводы <span class='badge bg-primary'>$cnt->translations</span></a>";
+}
 
-try {
-	$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav WHERE user_uuid=:uuid AND avtorid=:id");
-	$stmt->bindParam(":uuid", $user_uuid);
-	$stmt->bindParam(":id", $a->avtorid);
-	$stmt->execute();
-	$is_fav = ($stmt->fetch()->cnt > 0);
-	if (!$is_fav) {
-		echo "<a class='btn btn-secondary mt-2 w-100' href='$webroot/?fav_author=$a->avtorid'>В избранное</a>";
-	} else {
-		echo "<a class='btn btn-warning mt-2 w-100' href='$webroot/?unfav_author=$a->avtorid'>Из избранного</a>";
-	}
-} catch (PDOException $e) {
-	//
+if ($user_uuid != '') {
+	echo fav_link('author', $a->avtorid, fav_is($user_uuid, 'author', $a->avtorid), 'btn mt-2 w-100',
+		['btn-warning', 'Из избранного'], ['btn-secondary', 'В избранное'], 'Автор в избранное');
 }
 
 echo "</div>";
