@@ -24,6 +24,8 @@ echo <<< __HTML
 <script src="$webroot/bootstrap/js/bootstrap.bundle.min.js"></script>
 <script>var FAV_URL = '$webroot/fav.php';</script>
 <script src="$webroot/js/fav.js" defer></script>
+<script>var MARK_URL = '$webroot/mark.php';</script>
+<script src="$webroot/js/marks.js" defer></script>
 
 <link rel="icon" href="$webroot/favicon.svg" sizes="any" type="image/svg+xml">
 

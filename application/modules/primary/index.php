@@ -281,6 +281,12 @@ echo $fcontent;
 
 echo "</div>";
 
+// «Продолжить чтение» — на главной без поиска и фильтров
+if ($user_uuid !== '' && $page == 0 && $search_tsq === null && !isset($_SESSION['filter_author'])
+	&& !isset($_SESSION['filter_translator']) && !isset($_SESSION['filter_genre']) && !isset($_SESSION['filter_series'])) {
+	continue_reading_html($user_uuid, 'Продолжить чтение', "$webroot/fav/status/" . STATUS_READING);
+}
+
 
 if ($group_editions) {
 	// Группа стоит на месте лучшей по сортировке книги. Показывается при поиске
