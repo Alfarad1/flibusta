@@ -1,5 +1,13 @@
 <?php
 
+// Ссылка на статический файл из public/ с версией по времени изменения:
+// после деплоя браузеры не берут из кэша старые CSS и JS.
+function asset($path) {
+	global $webroot;
+	$mtime = @filemtime(ROOT_PATH . 'public/' . $path);
+	return "$webroot/$path" . ($mtime ? "?v=$mtime" : '');
+}
+
 function bbc2html($content) {
   $search = array (
     '/(\[b\])(.*?)(\[\/b\])/',
