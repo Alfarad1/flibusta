@@ -17,8 +17,10 @@ function get_ds($path){
 
 if (!$status_import) {
 	$cache_size = get_ds("/application/cache/covers") + get_ds("/application/cache/authors");
-	if (is_dir("/application/cache/converted")) {
-		$cache_size += get_ds("/application/cache/converted");
+	foreach (["/application/cache/converted", "/application/cache/reader"] as $dir) {
+		if (is_dir($dir)) {
+			$cache_size += get_ds($dir);
+		}
 	}
 	$books_size = round(get_ds("/application/flibusta") / 1024, 1);
 	$qtotal = $dbh->query("SELECT (SELECT MAX(time) FROM libbook) mmod, (SELECT COUNT(*) FROM libbook) bcnt, (SELECT COUNT(*) FROM libbook WHERE deleted='0') bdcnt");
@@ -49,6 +51,7 @@ if (isset($_GET['empty'])) {
 	shell_exec('rm /application/cache/authors/*');
 	shell_exec('rm /application/cache/covers/*');
 	shell_exec('rm -f /application/cache/converted/*');
+	shell_exec('rm -rf /application/cache/reader/*');
 	header("location:$webroot/service/");
 }
 

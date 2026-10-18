@@ -1,5 +1,7 @@
 <?php
-// Позиция чтения FB2 (в процентах прокрутки) для текущего пользователя
+// Позиция чтения текущего пользователя: pos — процент прочитанного,
+// loc — точное место (для FB2 «p:абзац:доля», для EPUB — CFI).
+// Если у книги ещё нет статуса или он «Хочу прочитать», ставится «Читаю».
 include('../init.php');
 session_start();
 user_init();
@@ -10,17 +12,23 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $user_uuid === '') {
 }
 $bookid = intval($_POST['bookid'] ?? 0);
 $pos = floatval($_POST['pos'] ?? 0);
+$loc = substr(trim($_POST['loc'] ?? ''), 0, 1000);
 if ($bookid <= 0) {
 	http_response_code(400);
 	die();
 }
 
-if ($pos <= 0) {
+if ($pos <= 0 && $loc === '') {
 	$stmt = $dbh->prepare("DELETE FROM progress WHERE user_uuid=:uuid AND bookid=:id");
 	$stmt->execute([':uuid' => $user_uuid, ':id' => $bookid]);
 	die();
 }
 
-$stmt = $dbh->prepare("INSERT INTO progress (user_uuid, bookid, pos) VALUES (:uuid, :id, :pos)
-	ON CONFLICT (user_uuid, bookid) DO UPDATE SET pos=EXCLUDED.pos");
-$stmt->execute([':uuid' => $user_uuid, ':id' => $bookid, ':pos' => min($pos, 100)]);
+$stmt = $dbh->prepare("INSERT INTO progress (user_uuid, bookid, pos, loc) VALUES (:uuid, :id, :pos, :loc)
+	ON CONFLICT (user_uuid, bookid) DO UPDATE SET pos=EXCLUDED.pos, loc=EXCLUDED.loc, updated=now()");
+$stmt->execute([':uuid' => $user_uuid, ':id' => $bookid, ':pos' => max(0, min($pos, 100)), ':loc' => $loc === '' ? null : $loc]);
+
+$stmt = $dbh->prepare("INSERT INTO book_status (user_uuid, bookid, status) VALUES (:u, :b, " . STATUS_READING . ")
+	ON CONFLICT (user_uuid, bookid) DO UPDATE SET status=EXCLUDED.status, updated=now()
+	WHERE book_status.status=1");
+$stmt->execute([':u' => $user_uuid, ':b' => $bookid]);
