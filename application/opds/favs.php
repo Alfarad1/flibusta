@@ -14,13 +14,10 @@ echo <<< _XML
  <link href="$webroot/opds/favs/" rel="self" type="application/atom+xml;profile=opds-catalog" />
 _XML;
 
-$favs = $dbh->prepare("SELECT * FROM fav_users");
-$favs->execute();
-
-while ($fav = $favs->fetch()) {
+foreach (user_list() as $fav) {
 	echo "<entry> <updated>$cdt</updated>";
 	echo " <id>tag:fav:$fav->user_uuid</id>";
-	echo " <title>$fav->name</title>";
+	echo " <title>" . h($fav->name) . "</title>";
 	echo " <content type='text'></content>";
 	echo " <link href='$webroot/opds/fav/?uuid=$fav->user_uuid' type='application/atom+xml;profile=opds-catalog' />";
 	echo "</entry>";

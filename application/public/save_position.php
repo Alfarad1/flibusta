@@ -1,29 +1,26 @@
 <?php
+// Позиция чтения FB2 (в процентах прокрутки) для текущего пользователя
 include('../init.php');
 session_start();
+user_init();
 
-if (!isset($_GET['user_uuid'])) {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $user_uuid === '') {
+	http_response_code($user_uuid === '' ? 403 : 405);
+	die();
+}
+$bookid = intval($_POST['bookid'] ?? 0);
+$pos = floatval($_POST['pos'] ?? 0);
+if ($bookid <= 0) {
+	http_response_code(400);
 	die();
 }
 
-$user_uuid = $_GET['user_uuid'];
-if ($user_uuid == "") {
-	die();
-}
-$bookid = intval($_GET['bookid']);
-$pos = floatval($_GET['pos']);
-
-if ($pos == 0) {
+if ($pos <= 0) {
 	$stmt = $dbh->prepare("DELETE FROM progress WHERE user_uuid=:uuid AND bookid=:id");
-	$stmt->bindParam(":uuid", $user_uuid);
-	$stmt->bindParam(":id", $bookid);
-	$stmt->execute();
+	$stmt->execute([':uuid' => $user_uuid, ':id' => $bookid]);
 	die();
 }
 
-$stmt = $dbh->prepare("INSERT INTO progress (user_uuid, bookid, pos) VALUES (:uuid, :id, :pos) ON CONFLICT(user_uuid, bookid) DO UPDATE set pos=:pos2");
-$stmt->bindParam(":uuid", $user_uuid);
-$stmt->bindParam(":id", $bookid);
-$stmt->bindParam(":pos", $pos);
-$stmt->bindParam(":pos2", $pos);
-$stmt->execute();
+$stmt = $dbh->prepare("INSERT INTO progress (user_uuid, bookid, pos) VALUES (:uuid, :id, :pos)
+	ON CONFLICT (user_uuid, bookid) DO UPDATE SET pos=EXCLUDED.pos");
+$stmt->execute([':uuid' => $user_uuid, ':id' => $bookid, ':pos' => min($pos, 100)]);

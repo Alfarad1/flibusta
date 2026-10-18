@@ -13,9 +13,9 @@ echo <<< _XML
 <link href="$webroot/opds/search?q={searchTerms}" rel="search" type="application/atom+xml" />
 <link href="$webroot/opds/" rel="start" type="application/atom+xml;profile=opds-catalog" />
 _XML;
-echo "<link href=".$webroot.'/opds/fav/?uuid='.$_GET['uuid'].' rel="self" type="application/atom+xml;profile=opds-catalog" />';
- 
-$uuid = $_GET['uuid'];
+$uuid = is_uuid($_GET['uuid'] ?? '') ? $_GET['uuid'] : '00000000-0000-0000-0000-000000000000';
+echo "<link href='$webroot/opds/fav/?uuid=$uuid' rel='self' type='application/atom+xml;profile=opds-catalog' />";
+
 $books = $dbh->prepare("SELECT DISTINCT b.*
 		FROM fav f
 		LEFT JOIN libbook b USING(bookid)

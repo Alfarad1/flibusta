@@ -1,10 +1,7 @@
 <?php
-$stmt = $dbh->prepare("SELECT COUNT(*) cnt FROM fav_users");
-$stmt->execute();
-$fav_count = $stmt->fetch()->cnt;
-
-if ($fav_count == 0) {
-	die("Книжные полки не определены");
+if ($user_uuid === '') {
+	echo "<div class='alert alert-info'>Полка у каждого своя. <a href='$webroot/users/?return=" . urlencode("$webroot/fav/") . "'>Войдите</a>, чтобы её увидеть.</div>";
+	return;
 }
 
 $stmt = $dbh->prepare("SELECT *

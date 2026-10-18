@@ -15,6 +15,8 @@ define('CONVERT_FORMATS', [
 include(ROOT_PATH . 'functions.php');
 include(ROOT_PATH . 'fts.php');
 include(ROOT_PATH . 'dbinit.php');
+include(ROOT_PATH . 'schema.php');
+include(ROOT_PATH . 'users.php');
 include_once(ROOT_PATH . 'webroot.php');
 session_set_cookie_params(3600 * 24 * 31 * 12,"/");
 #session_start();

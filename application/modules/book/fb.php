@@ -1,23 +1,21 @@
+<?php
+if ($user_uuid != "") {
+	// позиция чтения — процент прокрутки, сохраняется после остановки прокрутки
+	echo "<script>var SAVE_POSITION_URL = '$webroot/save_position.php', BOOK_ID = $url->var1;</script>";
+?>
 <script>
 var isScrolling;
 
 window.addEventListener('scroll', function ( event ) {
 	window.clearTimeout( isScrolling );
 	isScrolling = setTimeout(function() {
-		console.log( this.scrollY );
-		var x = new XMLHttpRequest();
-		x.open("GET", "<?php echo "$webroot/save_position.php?user_uuid=$user_uuid&bookid=$url->var1&pos=";?>" 
-		+ (100 / document.body.scrollHeight * this.scrollY), true);
-		x.send(null);
+		var body = new URLSearchParams({bookid: BOOK_ID, pos: 100 / document.body.scrollHeight * window.scrollY});
+		fetch(SAVE_POSITION_URL, {method: 'POST', body: body, credentials: 'same-origin'});
 	}, 66);
 
 }, false);
 </script>
-
-
 <?php
-
-if ($user_uuid != "") {
 	$stmt = $dbh->prepare("SELECT pos FROM progress WHERE user_uuid=:uuid AND bookid=:id LIMIT 1");
 	$stmt->bindParam(":uuid", $user_uuid);
 	$stmt->bindParam(":id", $url->var1);
