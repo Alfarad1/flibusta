@@ -100,6 +100,11 @@ function to_pg_array($set) {
 }
 
 
+// Экранирование текста для вывода в HTML и XML
+function h($s) {
+	return htmlspecialchars((string)$s, ENT_QUOTES);
+}
+
 function is_book_available($bookid) {
 	global $dbh;
 	static $stmt = null;

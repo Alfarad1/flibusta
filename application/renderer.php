@@ -63,11 +63,18 @@ __HTML
 // активный пункт меню; страницы книги и автора относятся к разделам «Книги» и «Авторы»
 $menu_mod = [
 	'genres' => 'genres', 'authors' => 'authors', 'author' => 'authors',
-	'series' => 'series', 'fav' => 'fav', 'favlist' => 'fav', 'service' => 'service',
+	'series' => 'series', 'fav' => 'fav', 'users' => 'users', 'service' => 'service',
 ][$url->mod] ?? 'primary';
 $menu = [];
 foreach (['primary', 'genres', 'authors', 'series', 'fav', 'service'] as $m) {
 	$menu[$m] = $m === $menu_mod ? 'active' : '';
+}
+// справа — текущий пользователь или вход с возвратом на эту страницу
+if ($user_uuid !== '') {
+	$user_button = "<a href='$webroot/users/' class='btn btn-outline-success' title='Сменить пользователя'><i class='fas fa-user'></i> " . h($user_name) . "</a>";
+} else {
+	$back = $url->mod === 'users' ? '' : '?return=' . urlencode($_SERVER['REQUEST_URI'] ?? '');
+	$user_button = "<a href='$webroot/users/$back' class='btn btn-outline-light'><i class='fas fa-sign-in-alt'></i> Войти</a>";
 }
 
 
@@ -97,7 +104,7 @@ echo <<< __HTML
 
 <div class="d-flex">
 
-<a href='$webroot/favlist/' class='btn btn-outline-success' type='submit'>$user_name</a>
+$user_button
 __HTML
 ?>
 </div>

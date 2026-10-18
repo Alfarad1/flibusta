@@ -1,33 +1,33 @@
 <?php
 switch ($url->action) {
 	case 'list':
-		include('list.php');
+		include(__DIR__ . '/list.php');
 		break;
 	case 'authorsindex':
-		include('authorsindex.php');
+		include(__DIR__ . '/authorsindex.php');
 		break;
 	case 'author':
-		include('author.php');
+		include(__DIR__ . '/author.php');
 		break;
 	case 'sequencesindex':
-		include('sequencesindex.php');
+		include(__DIR__ . '/sequencesindex.php');
 		break;
 	case 'genres':
-		include('genres.php');
+		include(__DIR__ . '/genres.php');
 		break;
 	case 'listgenres':
-		include('listgenres.php');
+		include(__DIR__ . '/listgenres.php');
 		break;
 	case 'fav':
-		include('fav.php');
+		include(__DIR__ . '/fav.php');
 		break;
 	case 'favs':
-		include('favs.php');
+		include(__DIR__ . '/favs.php');
 		break;
 	case 'search':
-		include('search.php');
+		include(__DIR__ . '/search.php');
 		break;
 
 	default:
-		include('main.php');
+		include(__DIR__ . '/main.php');
 }
