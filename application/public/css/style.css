@@ -257,3 +257,12 @@ section1 section p {
 .rating .fa-star, .rating .fa-star-half-alt {
 	color: #f0a020;
 }
+
+/* другие издания книги в карточке */
+.editions summary {
+	cursor: pointer;
+	color: #0d6efd;
+}
+.editions ul {
+	padding-left: 1.2em;
+}

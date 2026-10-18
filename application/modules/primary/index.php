@@ -13,6 +13,13 @@ if (isset($_GET['ru'])) {
 		$_SESSION['ru'] = true;
 	}
 }
+if (isset($_GET['editions'])) {
+	if ($_GET['editions'] == '') {
+		unset($_SESSION['all_editions']);
+	} else {
+		$_SESSION['all_editions'] = true;
+	}
+}
 if (isset($_GET['missing'])) {
 	if ($_GET['missing'] == '') {
 		unset($_SESSION['show_missing']);
@@ -101,6 +108,14 @@ if (isset($_GET['xgid'])) {
 }
 
 
+// Издания одной книги (book_editions) показываются одной карточкой. Только когда
+// выборка небольшая — поиск, автор, переводчик или серия: группировка требует
+// перебрать все подходящие книги, на всём каталоге это слишком медленно.
+$editions_applicable = db_has_table('book_editions') && ($search_tsq !== null
+	|| isset($_SESSION['filter_author']) || isset($_SESSION['filter_translator'])
+	|| isset($_SESSION['filter_series']));
+$group_editions = $editions_applicable && !isset($_SESSION['all_editions']);
+
 $filter = '';
 $fcontent = '';
 $join = '';
@@ -127,6 +142,13 @@ if (isset($_SESSION['show_missing'])) {
 } else {
 	$filter .= "AND EXISTS (SELECT 1 FROM book_available ba WHERE ba.bookid=b.BookId) ";
 	$fcontent .= "<a class='btn bg-secondary text-white bg-opacity-90' href='$webroot/?missing=1$qamp' title='Скрыты книги, файлов которых нет в локальном архиве'>Только доступные</a> ";
+}
+if ($editions_applicable) {
+	if ($group_editions) {
+		$fcontent .= "<a class='btn bg-info text-white bg-opacity-90' href='$webroot/?editions=all$qamp' title='Из нескольких изданий одной книги показывается одно, остальные — списком в карточке'>Без повторов</a> ";
+	} else {
+		$fcontent .= "<a class='btn bg-info text-white bg-opacity-50' href='$webroot/?editions$qamp' title='Каждое издание показывается отдельно'>Все издания</a> ";
+	}
 }
 $fcontent .= '</div>';
 
@@ -260,14 +282,50 @@ echo $fcontent;
 echo "</div>";
 
 
-$sql = "SELECT b.*, $cols
-        (SELECT Body FROM libbannotations WHERE BookId=b.BookId LIMIT 1) Body
+if ($group_editions) {
+	// Группа стоит на месте лучшей по сортировке книги. Показывается при поиске
+	// по релевантности — издание с файлом, fb2, с бо́льшим числом оценок,
+	// при явной сортировке — первое по ней (самое новое, с лучшим рейтингом).
+	$has_rating = db_has_table('book_rating');
+	$best = 'x._avail DESC, x._fb2 DESC, ' . ($has_rating ? 'x._votes DESC NULLS LAST, ' : '') . 'x.pos';
+	$rep = ($sort_mode === '' && $search_tsq !== null) ? $best : 'x.pos';
+	// окна считаются по узким строкам, полные строки книг берутся только для страницы
+	$sql = "SELECT b.*, z.editions,
+		(SELECT Body FROM libbannotations WHERE BookId=b.BookId LIMIT 1) Body
+		FROM (
+			SELECT y.bookid, y.editions, y.gpos FROM (
+				SELECT x.*, MIN(x.pos) OVER (PARTITION BY x.wid) gpos,
+					row_number() OVER (PARTITION BY x.wid ORDER BY $rep) grn
+				FROM (
+					SELECT b.BookId bookid, e.editions, COALESCE(e.workid, b.BookId) wid,
+						row_number() OVER (ORDER BY $order) pos,
+						EXISTS (SELECT 1 FROM book_available ba WHERE ba.bookid=b.BookId) _avail,
+						b.filetype='fb2' _fb2
+						" . ($has_rating ? ', rv.votes _votes' : '') . "
+					FROM libbook b
+					$join
+					$order_join
+					LEFT JOIN book_editions e ON e.bookid=b.BookId
+					" . ($has_rating ? 'LEFT JOIN book_rating rv ON rv.bookid=b.BookId' : '') . "
+					WHERE deleted='0'
+					$filter
+				) x
+			) y
+			WHERE grn=1
+			ORDER BY gpos LIMIT " . RECORDS_PAGE . " OFFSET $start
+		) z
+		JOIN libbook b ON b.BookId=z.bookid
+		ORDER BY z.gpos";
+} else {
+	$sql = "SELECT b.*, $cols
+		(SELECT Body FROM libbannotations WHERE BookId=b.BookId LIMIT 1) Body
 		FROM libbook b
 		$join
 		$order_join
 		WHERE deleted='0'
 		$filter
 		ORDER BY $order LIMIT " . RECORDS_PAGE . " OFFSET $start";
+}
 
 //echo "$sql";
 
@@ -286,11 +344,18 @@ try {
 }
 
 if (COUNT_BOOKS) {
-	$sql = "SELECT COUNT(*) cnt
-		FROM libbook b
-		$join
-		WHERE deleted='0'
-		$filter";
+	$sql = $group_editions
+		? "SELECT COUNT(DISTINCT COALESCE(e.workid, b.BookId)) cnt
+			FROM libbook b
+			$join
+			LEFT JOIN book_editions e ON e.bookid=b.BookId
+			WHERE deleted='0'
+			$filter"
+		: "SELECT COUNT(*) cnt
+			FROM libbook b
+			$join
+			WHERE deleted='0'
+			$filter";
 	$stt = $dbh->prepare($sql);
 	$stt->execute($params);
 	$cnt = $stt->fetch()->cnt;
