@@ -82,7 +82,11 @@ echo <<< __HTML
   <a class="navbar-brand" href="$webroot/" title="Библиотека">
    &nbsp;Библиотека
   </a>
-		<ul class="navbar-nav mr-auto">
+  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainMenu" aria-controls="mainMenu" aria-expanded="false" aria-label="Меню">
+    <span class="navbar-toggler-icon"></span>
+  </button>
+  <div class="collapse navbar-collapse" id="mainMenu">
+		<ul class="navbar-nav mx-auto mb-2 mb-lg-0">
 			<li class="nav-item"><a title="" class='nav-link {$menu['primary']}' href="$webroot/">Книги</a></li>
 			<li class="nav-item"><a title="" class='nav-link {$menu['genres']}' href="$webroot/genres/">Жанры</a></li>
 			<li class="nav-item"><a title="" class='nav-link {$menu['authors']}' href="$webroot/authors/">Авторы</a></li>
@@ -97,6 +101,7 @@ echo <<< __HTML
 __HTML
 ?>
 </div>
+  </div>
 
 </div>
 </nav>
