@@ -266,3 +266,32 @@ section1 section p {
 .editions ul {
 	padding-left: 1.2em;
 }
+
+/* меню «статус и полки»: галочка у выбранных пунктов */
+.marks-menu .mark-check {
+	visibility: hidden;
+	width: 1.2em;
+}
+.marks-menu .mark-on .mark-check {
+	visibility: visible;
+}
+
+/* кнопки избранного и статуса поверх обложки */
+.cover-actions {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	z-index: 2;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+	border-radius: .25rem;
+}
+.cover-actions .btn-outline-secondary {
+	background-color: #fff;
+}
+.cover-actions .btn-outline-secondary:hover {
+	background-color: #6c757d;
+}
+/* открытое меню — поверх кнопок соседних карточек */
+.cover-actions:has(.dropdown-menu.show) {
+	z-index: 1000;
+}

@@ -116,10 +116,10 @@ function is_book_available($bookid) {
 }
 
 // Параметры адреса, которые сохраняются при листании, переключении фильтров
-// и добавлении в избранное: поисковый запрос и сортировка. Остальные фильтры
-// хранятся в сессии. Возвращает строку вида "&amp;q=...&amp;sort=...".
+// и добавлении в избранное: поисковый запрос, сортировка и чьи полки смотрим.
+// Остальные фильтры хранятся в сессии. Возвращает строку вида "&amp;q=...&amp;sort=...".
 function keep_params_amp($with_page = false) {
-	$keys = ['q', 'sort'];
+	$keys = ['q', 'sort', 'user'];
 	if ($with_page) {
 		$keys[] = 'page';
 	}
@@ -145,7 +145,7 @@ function db_has_table($name) {
 }
 
 /***************************************************************************/
-// Избранное: книги, авторы и серии в таблице fav
+// Избранное: авторы и серии в таблице fav, книги — на полке «Избранное» (shelves.php)
 
 const FAV_COLUMNS = ['book' => 'bookid', 'author' => 'avtorid', 'seq' => 'seqid'];
 
@@ -153,6 +153,9 @@ function fav_is($uuid, $type, $id) {
 	global $dbh;
 	if ($uuid == '') {
 		return false;
+	}
+	if ($type === 'book') {
+		return in_array(shelf_fav_id($uuid), user_marks($uuid)['shelves'][$id] ?? []);
 	}
 	$col = FAV_COLUMNS[$type];
 	$stmt = $dbh->prepare("SELECT 1 FROM fav WHERE user_uuid=:uuid AND $col=:id LIMIT 1");
@@ -162,6 +165,11 @@ function fav_is($uuid, $type, $id) {
 
 function fav_set($uuid, $type, $id, $on) {
 	global $dbh;
+	if ($type === 'book') {
+		shelf_set(shelf_fav_id($uuid), $id, $on);
+		user_marks($uuid, true);
+		return;
+	}
 	$col = FAV_COLUMNS[$type];
 	// уникальный индекс по (user_uuid, bookid, avtorid, seqid) не ловит дубли
 	// из-за NULL в остальных колонках, поэтому сначала удаляем
@@ -186,6 +194,15 @@ function fav_link($type, $id, $is_fav, $class, $on, $off, $title = 'В избр�
 		. " data-fav-type='$type' data-fav-id='$id' data-fav='" . ($is_fav ? 1 : 0) . "'"
 		. " data-on-class='" . $attr($on[0]) . "' data-off-class='" . $attr($off[0]) . "'"
 		. " data-on-html='" . $attr($on[1]) . "' data-off-html='" . $attr($off[1]) . "'>$html</a>";
+}
+
+// Избранное, статус и полки — кнопки в углу обложки
+function book_actions($bookid) {
+	global $user_uuid;
+	if ($user_uuid == '') {
+		return '';
+	}
+	return "<div class='btn-group cover-actions'>" . fav_book_link($bookid) . marks_menu($bookid) . "</div>";
 }
 
 function fav_book_link($bookid) {
@@ -364,13 +381,15 @@ function opds_convert_links($bookid, $webroot = '') {
 	}
 }
 
-function book_small_pg($book, $webroot='',$full = false) {
+// $note — HTML под названием (например, прогресс чтения)
+function book_small_pg($book, $webroot='',$full = false, $note = '') {
 	global $dbh, $user_uuid;
 	if (!isset($book->bookid)) {
 		return;
 	}
 	echo "<div class='col-sm-2 col-6 mb-3'>";
-	echo "<div style='height: 100%' class='cover rounded text-center d-flex align-items-end flex-column'>";
+	echo "<div style='height: 100%' class='cover rounded text-center d-flex align-items-end flex-column position-relative'>";
+	echo book_actions($book->bookid);
 	echo "<a class='w-100' href='$webroot/book/view/$book->bookid'>";
 	echo "<img class='w-100 card-image rounded-top' src='$webroot/extract_cover.php?id=$book->bookid&small' />";
 
@@ -390,6 +409,7 @@ function book_small_pg($book, $webroot='',$full = false) {
 	}
 
 	echo "<div>$book->title</div></a>";
+	echo $note;
 	echo rating_html(book_rating($book->bookid), true);
 	if ($new = book_replacement($book->bookid)) {
 		echo "<a class='badge bg-warning text-dark' href='$webroot/book/view/$new->bookid' title='" . htmlspecialchars($new->title, ENT_QUOTES) . "'>есть новая редакция</a>";
@@ -403,7 +423,6 @@ function book_small_pg($book, $webroot='',$full = false) {
 		echo "<button type='button' class='btn btn-outline-secondary btn-sm' disabled title='Файла нет в локальном архиве'>нет файла</button>";
 	}
 //	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$book->lang</button>";
-	echo fav_book_link($book->bookid);
 	echo "</div></div></div>\n";
 }
 
@@ -419,7 +438,10 @@ function book_info_pg($book, $webroot = '', $full = false) {
 	echo "<div class='card-body'>";
 	echo "<div class='row'>";
 	echo "<div class='col-sm-2'>";
+	echo "<div class='position-relative'>";
+	echo book_actions($book->bookid);
 	echo "<img class='w-100 card-image rounded cover' src='$webroot/extract_cover.php?id=$book->bookid&small' />";
+	echo "</div>";
 
 	$dt =DateTime::createFromFormat('Y-m-d H:i:se', $book->time)->format('Y-m-d');
 	if (trim($book->filetype) == 'fb2') {
@@ -446,7 +468,6 @@ function book_info_pg($book, $webroot = '', $full = false) {
 		echo "<button type='button' class='btn btn-outline-secondary btn-sm' disabled title='Файла нет в локальном архиве'>нет файла</button>";
 	}
 //	echo "<button type='button' class='btn btn-outline-secondary btn-sm'>$book->lang</button>";
-	echo fav_book_link($book->bookid);
 	echo "</div>";
 	
 	echo "</div><div class='col-sm-10'>";
@@ -478,6 +499,7 @@ function book_info_pg($book, $webroot = '', $full = false) {
 	}
 
 	echo rating_html(book_rating($book->bookid));
+	echo status_badge($book->bookid);
 
 	if ($new = book_replacement($book->bookid)) {
 		echo "<div class='alert alert-warning py-1 px-2 my-1 small'>На Флибусте эта книга заменена новой редакцией: ";

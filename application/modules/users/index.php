@@ -46,9 +46,11 @@ if ($action === 'login') {
 
 $users = user_list();
 $counts = [];
-foreach ($dbh->query("SELECT user_uuid,
-		COUNT(bookid) books, COUNT(avtorid) authors, COUNT(seqid) series
-	FROM fav GROUP BY user_uuid") as $r) {
+foreach ($dbh->query("SELECT u.user_uuid,
+		(SELECT COUNT(*) FROM shelf s WHERE s.user_uuid=u.user_uuid) shelves,
+		(SELECT COUNT(DISTINCT sb.bookid) FROM shelf s JOIN shelf_book sb ON sb.shelf_id=s.id WHERE s.user_uuid=u.user_uuid) books,
+		(SELECT COUNT(*) FROM book_status st WHERE st.user_uuid=u.user_uuid AND st.status=" . STATUS_READ . ") done
+	FROM fav_users u") as $r) {
 	$counts[$r->user_uuid] = $r;
 }
 $ret = $return !== '' ? "<input type='hidden' name='return' value='" . h($return) . "'>" : '';
@@ -67,7 +69,7 @@ foreach ($users as $u) {
 	echo "<div class='card-body d-flex align-items-center'>";
 	echo "<div class='me-auto'><h5 class='card-title mb-1'><i class='fas fa-user'></i> " . h($u->name) . "</h5>";
 	echo "<div class='small text-muted'>";
-	echo 'Книг: ' . ($c->books ?? 0) . ', авторов: ' . ($c->authors ?? 0) . ', серий: ' . ($c->series ?? 0);
+	echo "<a href='$webroot/fav/" . ($me ? '' : "?user=$u->user_uuid") . "'>Полок: " . ($c->shelves ?? 0) . '</a>, книг на полках: ' . ($c->books ?? 0) . ', прочитано: ' . ($c->done ?? 0);
 	echo "</div></div>";
 	if ($me) {
 		echo "<span class='badge bg-success'>это вы</span>";
@@ -104,7 +106,7 @@ if ($user_uuid !== '') {
 
 	echo "<details><summary class='text-danger'>Удалить пользователя</summary>";
 	echo "<form method='post' class='mt-2'><input type='hidden' name='action' value='delete'>";
-	echo "<p class='small mb-2'>Удалятся избранное и прогресс чтения. Для подтверждения введите имя «" . h($user_name) . "».</p>";
+	echo "<p class='small mb-2'>Удалятся полки, статусы книг, избранное и прогресс чтения. Для подтверждения введите имя «" . h($user_name) . "».</p>";
 	echo "<div class='input-group'>";
 	echo "<input name='confirm' class='form-control' autocomplete='off' required>";
 	echo "<button class='btn btn-danger'>Удалить</button>";

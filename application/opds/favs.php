@@ -19,7 +19,7 @@ foreach (user_list() as $fav) {
 	echo " <id>tag:fav:$fav->user_uuid</id>";
 	echo " <title>" . h($fav->name) . "</title>";
 	echo " <content type='text'></content>";
-	echo " <link href='$webroot/opds/fav/?uuid=$fav->user_uuid' type='application/atom+xml;profile=opds-catalog' />";
+	echo " <link href='$webroot/opds/fav/?uuid=$fav->user_uuid' type='application/atom+xml;profile=opds-catalog;kind=navigation' />";
 	echo "</entry>";
 }
 

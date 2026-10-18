@@ -45,18 +45,52 @@ check "повторное имя занято" sh -c "curl -s -X POST --data-url
 
 check "в избранное" sh -c "curl -s -b '$JAR' -X POST -d 'type=book&id=$book&on=1' '$B/fav.php' | grep -q '\"fav\":true'"
 get "$B/fav/" >"$T/fav"
-check "книга на полке" has "$T/fav" "data-fav-id='$book'"
+favshelf=$(grep -o "/fav/shelf/[0-9]*" "$T/fav" | head -1 | grep -o '[0-9]*$')
+check "у нового пользователя есть «Избранное»" [ -n "$favshelf" ]
+get "$B/fav/shelf/$favshelf" >"$T/shelf"
+check "книга на полке «Избранное»" has "$T/shelf" "data-fav-id='$book'"
 check "позиция чтения сохраняется" [ "$(code -X POST -d "bookid=$book&pos=10" "$B/save_position.php")" = 200 ]
+
+check "создание полки" [ "$(code -X POST --data-urlencode "action=create" --data-urlencode "name=Полка <i>" "$B/fav/")" = 302 ]
+shelf=$(get "$B/fav/" | grep -o "/fav/shelf/[0-9]*" | grep -v "/$favshelf\$" | head -1 | grep -o '[0-9]*$')
+check "новая полка в списке" [ -n "$shelf" ] && [ "$shelf" != "$favshelf" ]
+check "название полки экранировано" sh -c "curl -s -b '$JAR' '$B/fav/' | grep -q 'Полка &lt;i&gt;'"
+check "повторное название полки занято" sh -c "curl -s -b '$JAR' -X POST --data-urlencode 'action=create' --data-urlencode 'name=полка <I>' '$B/fav/' | grep -q 'уже есть'"
+check "книга на свою полку" sh -c "curl -s -b '$JAR' -X POST -d 'bookid=$book&shelf=$shelf&on=1' '$B/mark.php' | grep -Eq '\"shelves\":\[([0-9]+,)*$shelf[],]'"
+check "статус «Читаю»" sh -c "curl -s -b '$JAR' -X POST -d 'bookid=$book&status=2' '$B/mark.php' | grep -q '\"status\":2'"
+JAR2=$T/cookies2
+name2="Smoke2 $RANDOM"
+curl -s -o /dev/null -c "$JAR2" -X POST --data-urlencode "action=create" --data-urlencode "name=$name2" "$B/users/"
+shelf2=$(curl -s -b "$JAR2" "$B/fav/" | grep -o "/fav/shelf/[0-9]*" | head -1 | grep -o '[0-9]*$')
+check "чужую полку менять нельзя" [ "$(code -X POST -d "bookid=$book&shelf=$shelf2&on=1" "$B/mark.php")" = 403 ]
+curl -s -o /dev/null -b "$JAR2" -X POST --data-urlencode "action=delete" --data-urlencode "confirm=$name2" "$B/users/"
+check "без входа отметки — 403" [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST -d "bookid=$book&status=1" "$B/mark.php")" = 403 ]
+get "$B/fav/shelf/$shelf" >"$T/shelf"
+check "книга на новой полке" has "$T/shelf" "data-fav-id='$book'"
+get "$B/fav/status/2" >"$T/status"
+check "книга в списке «Читаю»" has "$T/status" "data-fav-id='$book'"
+get "$B/" >"$T/home"
+check "на главной «Продолжить чтение»" has "$T/home" "Продолжить чтение"
+check "на странице книги статус" sh -c "curl -s -b '$JAR' '$B/book/view/$book' | grep -q 'fa-book-open'"
+check "чужие полки видны без входа" sh -c "curl -s '$B/fav/shelf/$shelf' | grep -q '/book/view/$book'"
+check "чужие полки без формы удаления" sh -c "! curl -s '$B/fav/shelf/$shelf' | grep -q 'Удалить полку'"
+check "переименование полки" [ "$(code -X POST --data-urlencode "action=rename" --data-urlencode "name=Полка 2" "$B/fav/shelf/$shelf")" = 302 ]
 
 get "$B/opds/favs/" >"$T/favs"
 check "OPDS: пользователь в списке полок" has "$T/favs" "$uuid"
 check "OPDS: имя экранировано" has "$T/favs" '&lt;b&gt;'
 get "$B/opds/fav/?uuid=$uuid" >"$T/opdsfav"
-check "OPDS: книга в ленте полки" has "$T/opdsfav" "tag:book:$book"
+check "OPDS: полки пользователя" has "$T/opdsfav" "shelf=$shelf"
+get "$B/opds/fav/?uuid=$uuid&shelf=$favshelf" >"$T/opdsfav"
+check "OPDS: книга в ленте «Избранного»" has "$T/opdsfav" "tag:book:$book"
+get "$B/opds/fav/?uuid=$uuid&status=2" >"$T/opdsfav"
+check "OPDS: книга в ленте «Читаю»" has "$T/opdsfav" "tag:book:$book"
 check "OPDS: мусор вместо uuid не ломает ленту" [ "$(code "$B/opds/fav/?uuid=x'")" = 200 ]
 
 check "переименование" [ "$(code -X POST --data-urlencode "action=rename" --data-urlencode "name=$name 2" "$B/users/")" = 302 ]
 check "удаление без подтверждения не проходит" sh -c "curl -s -b '$JAR' -X POST -d 'action=delete&confirm=x' '$B/users/' | grep -q 'введите своё имя'"
+check "удаление полки" [ "$(code -X POST -d "action=delete" "$B/fav/shelf/$shelf")" = 302 ]
+check "полки больше нет" sh -c "curl -s '$B/fav/shelf/$shelf' | grep -q 'Такой полки нет'"
 check "удаление" [ "$(code -X POST --data-urlencode "action=delete" --data-urlencode "confirm=$name 2" "$B/users/")" = 302 ]
 check "после удаления пользователя нет" sh -c "! curl -s '$B/users/' | grep -q '$uuid'"
 get "$B/" >"$T/home"

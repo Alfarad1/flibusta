@@ -34,6 +34,44 @@ const SCHEMA_MIGRATIONS = [
 		UPDATE fav_users SET name = trim(name) WHERE name <> trim(name);
 		CREATE UNIQUE INDEX IF NOT EXISTS i_fav_users_name ON fav_users (lower(name));
 	",
+	// 2. Полки (у каждого пользователя свои, «Избранное» — полка с fav=true),
+	//    статусы книг и время последнего чтения. Избранные книги из fav
+	//    переезжают на полку «Избранное»; авторы и серии остаются в fav.
+	2 => "
+		CREATE TABLE IF NOT EXISTS shelf (
+			id serial PRIMARY KEY,
+			user_uuid uuid NOT NULL,
+			name varchar(64) NOT NULL,
+			fav boolean NOT NULL DEFAULT false,
+			created timestamptz NOT NULL DEFAULT now()
+		);
+		CREATE UNIQUE INDEX IF NOT EXISTS i_shelf_name ON shelf (user_uuid, lower(name));
+		CREATE UNIQUE INDEX IF NOT EXISTS i_shelf_fav ON shelf (user_uuid) WHERE fav;
+		CREATE TABLE IF NOT EXISTS shelf_book (
+			shelf_id integer NOT NULL REFERENCES shelf(id) ON DELETE CASCADE,
+			bookid bigint NOT NULL,
+			added timestamptz NOT NULL DEFAULT now(),
+			PRIMARY KEY (shelf_id, bookid)
+		);
+		CREATE TABLE IF NOT EXISTS book_status (
+			user_uuid uuid NOT NULL,
+			bookid bigint NOT NULL,
+			status smallint NOT NULL,
+			updated timestamptz NOT NULL DEFAULT now(),
+			PRIMARY KEY (user_uuid, bookid)
+		);
+		CREATE INDEX IF NOT EXISTS i_book_status_list ON book_status (user_uuid, status, updated DESC);
+		ALTER TABLE progress ADD COLUMN IF NOT EXISTS updated timestamptz NOT NULL DEFAULT now();
+
+		INSERT INTO shelf (user_uuid, name, fav)
+			SELECT user_uuid, 'Избранное', true FROM fav_users u
+			WHERE NOT EXISTS (SELECT 1 FROM shelf s WHERE s.user_uuid = u.user_uuid AND s.fav);
+		INSERT INTO shelf_book (shelf_id, bookid)
+			SELECT DISTINCT s.id, f.bookid FROM fav f JOIN shelf s ON s.user_uuid = f.user_uuid AND s.fav
+			WHERE f.bookid IS NOT NULL
+			ON CONFLICT DO NOTHING;
+		DELETE FROM fav WHERE bookid IS NOT NULL;
+	",
 ];
 
 function schema_ensure() {
