@@ -27,7 +27,15 @@ if (isset($_POST['status'])) {
 		http_response_code(403);
 		die(json_encode(['error' => 'not your shelf']));
 	}
-	shelf_set($shelf->id, $bookid, ($_POST['on'] ?? '') === '1');
+	$on = ($_POST['on'] ?? '') === '1';
+	// с полки «На Kindle» книга сначала выкладывается в WebDAV или убирается оттуда
+	if ($shelf->kindle && kindle_config()) {
+		if ($err = $on ? kindle_upload($user_uuid, $bookid) : kindle_remove($user_uuid, $bookid)) {
+			http_response_code(502);
+			die(json_encode(['error' => $err]));
+		}
+	}
+	shelf_set($shelf->id, $bookid, $on);
 } else {
 	http_response_code(400);
 	die(json_encode(['error' => 'bad request']));

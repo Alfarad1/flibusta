@@ -77,6 +77,19 @@ const SCHEMA_MIGRATIONS = [
 	3 => "
 		ALTER TABLE progress ADD COLUMN IF NOT EXISTS loc text;
 	",
+	// 4. Полка «На Kindle» (kindle=true, одна на пользователя) и файлы, выложенные
+	//    с неё в WebDAV: path — имя файла в папке FLIBUSTA_WEBDAV_DIR.
+	4 => "
+		ALTER TABLE shelf ADD COLUMN IF NOT EXISTS kindle boolean NOT NULL DEFAULT false;
+		CREATE UNIQUE INDEX IF NOT EXISTS i_shelf_kindle ON shelf (user_uuid) WHERE kindle;
+		CREATE TABLE IF NOT EXISTS kindle_file (
+			user_uuid uuid NOT NULL,
+			bookid bigint NOT NULL,
+			path text NOT NULL,
+			uploaded timestamptz NOT NULL DEFAULT now(),
+			PRIMARY KEY (user_uuid, bookid)
+		);
+	",
 ];
 
 function schema_ensure() {

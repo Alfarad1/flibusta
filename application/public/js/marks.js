@@ -19,7 +19,12 @@ document.addEventListener('click', function (e) {
 	fetch(MARK_URL, {method: 'POST', body: body, credentials: 'same-origin'})
 		.then(function (r) {
 			if (!r.ok) {
-				throw new Error(r.status);
+				// текст ошибки от сервера (например, WebDAV для полки «На Kindle»)
+				return r.json().catch(function () {
+					return {};
+				}).then(function (res) {
+					throw new Error(res.error || '');
+				});
 			}
 			return r.json();
 		})
@@ -41,8 +46,8 @@ document.addEventListener('click', function (e) {
 				b.innerHTML = res.badge;
 			});
 		})
-		.catch(function () {
-			alert('Не удалось сохранить, попробуйте ещё раз');
+		.catch(function (err) {
+			alert(err.message || 'Не удалось сохранить, попробуйте ещё раз');
 		})
 		.finally(function () {
 			item.classList.remove('disabled');
