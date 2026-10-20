@@ -40,6 +40,10 @@ services:
             - FLIBUSTA_DBTYPE=postgres
             - FLIBUSTA_DBHOST=postgres
             - FLIBUSTA_DBPASSWORD_FILE=/run/secrets/FLIBUSTA_PWD
+        # полка «На Kindle» (см. README, «Kindle»)
+        env_file:
+            - path: .env
+              required: false
         secrets:
             - FLIBUSTA_PWD
 
