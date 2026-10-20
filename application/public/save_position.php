@@ -2,6 +2,7 @@
 // Позиция чтения текущего пользователя: pos — процент прочитанного,
 // loc — точное место (для FB2 «p:абзац:доля», для EPUB — CFI).
 // Если у книги ещё нет статуса или он «Хочу прочитать», ставится «Читаю».
+// Если книга выложена на Kindle, позицию получит и KOReader (kosync).
 include('../init.php');
 session_start();
 user_init();
@@ -32,3 +33,5 @@ $stmt = $dbh->prepare("INSERT INTO book_status (user_uuid, bookid, status) VALUE
 	ON CONFLICT (user_uuid, bookid) DO UPDATE SET status=EXCLUDED.status, updated=now()
 	WHERE book_status.status=1");
 $stmt->execute([':u' => $user_uuid, ':b' => $bookid]);
+
+kosync_from_web($user_uuid, $bookid, $pos, $loc);

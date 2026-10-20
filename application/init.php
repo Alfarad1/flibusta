@@ -19,6 +19,7 @@ include(ROOT_PATH . 'schema.php');
 include(ROOT_PATH . 'users.php');
 include(ROOT_PATH . 'shelves.php');
 include(ROOT_PATH . 'kindle.php');
+include(ROOT_PATH . 'kosync.php');
 include(ROOT_PATH . 'fb2html.php');
 include_once(ROOT_PATH . 'webroot.php');
 session_set_cookie_params(3600 * 24 * 31 * 12,"/");
