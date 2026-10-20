@@ -90,6 +90,25 @@ const SCHEMA_MIGRATIONS = [
 			PRIMARY KEY (user_uuid, bookid)
 		);
 	",
+	// 5. Прогресс из KOReader (kosync): document — хэш файла, по которому KOReader узнаёт книгу.
+	//    В kindle_file — оба хэша выложенного файла (по содержимому и по имени), чтобы найти книгу.
+	5 => "
+		CREATE TABLE IF NOT EXISTS kosync_progress (
+			user_uuid uuid NOT NULL,
+			document char(32) NOT NULL,
+			bookid bigint,
+			progress text NOT NULL,
+			percentage double precision NOT NULL,
+			device text NOT NULL DEFAULT '',
+			device_id text NOT NULL DEFAULT '',
+			updated timestamptz NOT NULL DEFAULT now(),
+			PRIMARY KEY (user_uuid, document)
+		);
+		ALTER TABLE kindle_file ADD COLUMN IF NOT EXISTS md5_file char(32);
+		ALTER TABLE kindle_file ADD COLUMN IF NOT EXISTS md5_name char(32);
+		CREATE INDEX IF NOT EXISTS i_kindle_file_md5_file ON kindle_file (md5_file);
+		CREATE INDEX IF NOT EXISTS i_kindle_file_md5_name ON kindle_file (md5_name);
+	",
 ];
 
 function schema_ensure() {
