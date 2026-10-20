@@ -53,25 +53,29 @@ function fav_header($owner, $mine, $title = '') {
 if ($shelf) {
 	if ($mine && $_SERVER['REQUEST_METHOD'] === 'POST') {
 		$action = $_POST['action'] ?? '';
-		if ($action === 'rename' && !$shelf->fav) {
+		if ($action === 'rename' && !shelf_fixed($shelf)) {
 			$error = shelf_rename($shelf, $_POST['name'] ?? '');
 			if (!$error) {
 				header("Location: $webroot/fav/shelf/$shelf->id");
 				exit;
 			}
-		} elseif ($action === 'delete' && !$shelf->fav) {
+		} elseif ($action === 'delete' && !shelf_fixed($shelf)) {
 			shelf_delete($shelf);
 			header("Location: $webroot/fav/");
 			exit;
 		}
 	}
-	fav_header($owner, $mine, ($shelf->fav ? "<i class='fas fa-heart'></i> " : '') . h($shelf->name));
+	fav_header($owner, $mine, (shelf_fixed($shelf) ? "<i class='" . shelf_icon($shelf) . "'></i> " : '') . h($shelf->name));
 	if ($error) {
 		echo "<div class='alert alert-warning'>" . h($error) . "</div>";
 	}
 	shelf_books_html("(SELECT bookid, added FROM shelf_book WHERE shelf_id=:id) x JOIN libbook b USING(bookid)",
 		[':id' => $shelf->id], $sort, $page);
-	if ($mine && !$shelf->fav) {
+	if ($shelf->kindle && $mine && kindle_config()) {
+		echo "<div class='alert alert-secondary small mt-3'><i class='fas fa-info-circle'></i> Книги с этой полки выкладываются в папку «"
+			. h(kindle_config()['dir']) . "» на WebDAV, откуда их забирает KOReader. Если убрать книгу с полки, файл удаляется из папки.</div>";
+	}
+	if ($mine && !shelf_fixed($shelf)) {
 		echo "<details class='mt-3'><summary>Переименовать или удалить полку</summary><div class='card card-body mt-2'>";
 		echo "<form method='post' class='mb-3'><input type='hidden' name='action' value='rename'>";
 		echo "<div class='input-group'><input name='name' class='form-control' maxlength='" . SHELF_NAME_MAX . "' value='" . h($shelf->name) . "' required>";
@@ -131,7 +135,7 @@ echo "</div>";
 echo "<div class='row'>";
 foreach (user_shelves($owner->user_uuid) as $sh) {
 	echo "<div class='col-6 col-md-4 col-lg-3 mb-3'><a class='card h-100 text-decoration-none' href='$webroot/fav/shelf/$sh->id'>";
-	echo "<div class='card-body'><h5 class='card-title mb-1'>" . ($sh->fav ? "<i class='fas fa-heart text-primary'></i> " : "<i class='fas fa-layer-group text-secondary'></i> ") . h($sh->name) . "</h5>";
+	echo "<div class='card-body'><h5 class='card-title mb-1'><i class='" . shelf_icon($sh) . ($sh->fav ? ' text-primary' : ' text-secondary') . "'></i> " . h($sh->name) . "</h5>";
 	echo "<div class='small text-muted'>$sh->cnt " . plural_ru($sh->cnt, 'книга', 'книги', 'книг') . "</div></div></a></div>";
 }
 echo "</div>";

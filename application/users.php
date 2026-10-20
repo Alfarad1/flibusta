@@ -123,7 +123,7 @@ function user_rename($uuid, $name) {
 function user_delete($uuid) {
 	global $dbh;
 	$dbh->beginTransaction();
-	foreach (['fav', 'progress', 'book_status', 'shelf', 'fav_users'] as $t) {
+	foreach (['fav', 'progress', 'book_status', 'kindle_file', 'shelf', 'fav_users'] as $t) {
 		$stmt = $dbh->prepare("DELETE FROM $t WHERE user_uuid=:uuid");
 		$stmt->execute([':uuid' => $uuid]);
 	}

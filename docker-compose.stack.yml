@@ -23,6 +23,12 @@ services:
       - POSTGRES_ADMIN_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_ADMIN_DBPASSWORD_FILE=/run/secrets/POSTGRES_ADMIN_PWD
       - DB_HOST_PINGS=3
+      # полка «На Kindle» → папка WebDAV для KOReader (см. README, «Kindle»); пусто — выключено
+      - FLIBUSTA_KINDLE_USER=${FLIBUSTA_KINDLE_USER:-}
+      - FLIBUSTA_WEBDAV_URL=${FLIBUSTA_WEBDAV_URL:-}
+      - FLIBUSTA_WEBDAV_USER=${FLIBUSTA_WEBDAV_USER:-}
+      - FLIBUSTA_WEBDAV_PASSWORD=${FLIBUSTA_WEBDAV_PASSWORD:-}
+      - FLIBUSTA_WEBDAV_DIR=${FLIBUSTA_WEBDAV_DIR:-Kindle}
     command: /application/tools/external_services_config/flibusta_entrypoint.sh
     networks:
       - internal

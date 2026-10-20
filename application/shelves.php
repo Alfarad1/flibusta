@@ -22,14 +22,15 @@ function shelf_get($id) {
 	return $stmt->fetch() ?: null;
 }
 
-// Полки пользователя: сначала «Избранное», потом по имени; cnt — число книг
+// Полки пользователя: сначала «Избранное» и «На Kindle», потом по имени; cnt — число книг
 function user_shelves($uuid) {
 	global $dbh;
 	static $cache = [];
 	if (!isset($cache[$uuid])) {
 		shelf_fav_id($uuid);
+		kindle_shelf_id($uuid);
 		$stmt = $dbh->prepare("SELECT s.*, (SELECT COUNT(*) FROM shelf_book sb WHERE sb.shelf_id=s.id) cnt
-			FROM shelf s WHERE user_uuid=:uuid ORDER BY fav DESC, lower(name)");
+			FROM shelf s WHERE user_uuid=:uuid ORDER BY fav DESC, kindle DESC, lower(name)");
 		$stmt->execute([':uuid' => $uuid]);
 		$cache[$uuid] = $stmt->fetchAll();
 	}
@@ -93,9 +94,20 @@ function shelf_rename($shelf, $name) {
 	return null;
 }
 
+// Иконка полки: у «Избранного» и «На Kindle» свои
+function shelf_icon($shelf) {
+	return $shelf->fav ? 'fas fa-heart' : ($shelf->kindle ? 'fas fa-tablet-alt' : 'fas fa-layer-group');
+}
+
+// «Избранное» и «На Kindle» нельзя переименовать и удалить
+// (если выгрузку на Kindle отключили, её полка становится обычной)
+function shelf_fixed($shelf) {
+	return $shelf->fav || ($shelf->kindle && kindle_config());
+}
+
 function shelf_delete($shelf) {
 	global $dbh;
-	if (!$shelf->fav) {
+	if (!shelf_fixed($shelf)) {
 		$dbh->prepare("DELETE FROM shelf WHERE id=:id")->execute([':id' => $shelf->id]);
 	}
 }
@@ -221,7 +233,8 @@ function marks_menu($bookid) {
 			continue;
 		}
 		$on = book_on_shelf($bookid, $sh->id) ? ' mark-on' : '';
-		$s .= "<li><a class='dropdown-item$on' href='#' data-shelf='$sh->id'>$check " . h($sh->name) . "</a></li>";
+		$icon = $sh->kindle ? " <i class='" . shelf_icon($sh) . " text-muted'></i>" : '';
+		$s .= "<li><a class='dropdown-item$on' href='#' data-shelf='$sh->id'>$check " . h($sh->name) . "$icon</a></li>";
 	}
 	$s .= "<li><a class='dropdown-item text-muted' href='$webroot/fav/#new-shelf'><i class='fas fa-plus'></i> Новая полка…</a></li>";
 	$s .= "</ul></div>";
