@@ -16,6 +16,10 @@ document.addEventListener('click', function (e) {
 		body.set('on', item.classList.contains('mark-on') ? '0' : '1');
 	}
 	item.classList.add('disabled');
+	// статус у книги один — после выбора меню закрываем; полок можно отметить несколько
+	if (item.dataset.status !== undefined) {
+		bootstrap.Dropdown.getOrCreateInstance(box.querySelector('.mark-button')).hide();
+	}
 	fetch(MARK_URL, {method: 'POST', body: body, credentials: 'same-origin'})
 		.then(function (r) {
 			if (!r.ok) {
@@ -38,7 +42,10 @@ document.addEventListener('click', function (e) {
 					a.classList.toggle('mark-on', res.shelves.indexOf(+a.dataset.shelf) >= 0);
 				});
 				var btn = b.querySelector('.mark-button');
-				btn.className = 'btn btn-sm mark-button ' + res.button.class;
+				// класс show нужно сохранить: по нему Bootstrap находит открытое меню,
+				// чтобы закрыть его кликом снаружи
+				var shown = btn.classList.contains('show');
+				btn.className = 'btn btn-sm mark-button ' + res.button.class + (shown ? ' show' : '');
 				btn.innerHTML = res.button.html;
 				btn.title = res.button.title;
 			});
@@ -52,4 +59,23 @@ document.addEventListener('click', function (e) {
 		.finally(function () {
 			item.classList.remove('disabled');
 		});
+});
+
+// Открытое меню закрывается, когда мышь уходит с кнопки и меню
+// (с небольшой задержкой, чтобы не закрыть его при случайном движении)
+document.addEventListener('mouseout', function (e) {
+	var box = e.target.closest('[data-marks]');
+	if (!box || box.contains(e.relatedTarget)) {
+		return;
+	}
+	var btn = box.querySelector('.mark-button.show');
+	if (!btn) {
+		return;
+	}
+	clearTimeout(box.closeTimer);
+	box.closeTimer = setTimeout(function () {
+		if (!box.matches(':hover')) {
+			bootstrap.Dropdown.getOrCreateInstance(btn).hide();
+		}
+	}, 400);
 });
