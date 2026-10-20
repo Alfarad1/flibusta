@@ -2,7 +2,9 @@
 // FB2 → HTML для читалки. Выводятся только известные элементы FB2 (белый список),
 // текст экранируется, поэтому HTML и скрипты внутри книги не попадают на страницу.
 // Результат — текст, оглавление по заголовкам разделов, сноски для всплывающих
-// подсказок и картинки — кэшируется в cache/reader/<версия>/<id>.
+// подсказок и картинки — кэшируется в cache/reader/<версия>/<id>. Там же xp.txt: для каждого
+// блока текста (абзаца, заголовка… — тех, по которым читалка запоминает место, «p:номер:доля»)
+// его адрес в KOReader (XPointer crengine), чтобы переносить позицию между сайтом и Kindle.
 
 const FB2HTML_VERSION = 1;
 const FB2HTML_CACHE = ROOT_PATH . 'cache/reader/v' . FB2HTML_VERSION;
@@ -14,11 +16,17 @@ class Fb2Html {
 	public $images = [];   // id картинки => [файл, mime, ширина, высота]
 	public $cover = null;  // id картинки обложки
 	public $lang = 'ru';
+	public $xps = [];      // XPointer каждого блока текста по порядку; '' — блок не из FB2
 
 	private $bookid;
 	private $webroot;
 	private $note_ids = [];
 	private $section_n = 0;
+	private $blk = [];     // XPointer блоков: 'main' — текст, id сноски — сноска
+	private $cur = 'main';
+	// spl_object_id элемента => [номер среди одноимённых соседей, их число, сам элемент —
+	// ссылка держит объект DOM, иначе PHP отдаёт его id другому узлу]
+	private $sib = [];
 
 	function __construct($bookid, $webroot) {
 		$this->bookid = $bookid;
@@ -62,9 +70,16 @@ class Fb2Html {
 		$html = '';
 		if ($this->cover && isset($this->images[$this->cover])) {
 			$html .= "<div class='cover-page'>" . $this->img_tag($this->cover, '') . "</div>";
+			$this->xps[] = '';
 		}
+		$this->cur = 'main';
 		$html .= $this->node_children($main, 0);
+		array_push($this->xps, ...($this->blk['main'] ?? []));
 		if ($this->notes) {
+			$this->xps[] = '';
+			foreach (array_keys($this->notes) as $id) {
+				array_push($this->xps, ...($this->blk[$id] ?? []));
+			}
 			// сноски и в конце книги: на них ведут ссылки, если всплывающее окно не открылось
 			$html .= "<section class='notes'><h2 id='notes'>Примечания</h2>";
 			foreach ($this->notes as $id => $note) {
@@ -74,6 +89,38 @@ class Fb2Html {
 		}
 		$this->html = $html;
 		return true;
+	}
+
+	// Адрес элемента в KOReader: /FictionBook/body[1]/section[2]/p[5] — номер ставится,
+	// только если у родителя несколько одноимённых элементов (как в crengine)
+	private function xp($n) {
+		$path = '';
+		for (; $n && $n->nodeType === XML_ELEMENT_NODE; $n = $n->parentNode) {
+			$p = $n->parentNode;
+			$num = '';
+			if ($p && $p->nodeType === XML_ELEMENT_NODE) {
+				if (!isset($this->sib[spl_object_id($n)])) {
+					$count = $idx = [];
+					foreach ($p->childNodes as $c) {
+						if ($c->nodeType === XML_ELEMENT_NODE) {
+							$idx[spl_object_id($c)] = [$c->localName, $count[$c->localName] = ($count[$c->localName] ?? 0) + 1, $c];
+						}
+					}
+					foreach ($idx as $oid => [$name, $i, $c]) {
+						$this->sib[$oid] = [$i, $count[$name], $c];
+					}
+				}
+				[$i, $cnt] = $this->sib[spl_object_id($n)];
+				$num = $cnt > 1 ? "[$i]" : '';
+			}
+			$path = '/' . $n->localName . $num . $path;
+		}
+		return $path;
+	}
+
+	// запоминает адрес очередного блока текста
+	private function blk($n) {
+		$this->blk[$this->cur][] = $this->xp($n);
 	}
 
 	private function children($node, $name) {
@@ -134,6 +181,8 @@ class Fb2Html {
 		$id = $section->getAttribute('id');
 		if ($id !== '') {
 			$this->note_ids[$id] = true;
+			$this->cur = $id;
+			$this->blk[$id] = [];
 			$html = '';
 			foreach ($section->childNodes as $c) {
 				if ($c->nodeType === XML_ELEMENT_NODE && $c->localName === 'title') {
@@ -191,6 +240,7 @@ class Fb2Html {
 				if ($depth >= 9) {
 					return "<div class='note-title'>$text</div>";
 				}
+				$this->blk($n);
 				$level = min(6, $depth + 1);
 				$tid = 's' . (++$this->section_n);
 				$plain = trim(preg_replace('/\s+/u', ' ', html_entity_decode(strip_tags(str_replace('<br>', ' ', $text)), ENT_QUOTES)));
@@ -199,10 +249,13 @@ class Fb2Html {
 				}
 				return "<h$level id='$tid' class='title'>$text</h$level>";
 			case 'subtitle':
+				$this->blk($n);
 				return "<p class='subtitle'$id>" . $this->inline($n) . "</p>";
 			case 'p':
+				$this->blk($n);
 				return "<p$id>" . $this->inline($n) . "</p>";
 			case 'empty-line':
+				$this->blk($n);
 				return "<div class='empty-line'></div>";
 			case 'epigraph':
 				return "<blockquote class='epigraph'$id>" . $this->node_children($n, $depth) . "</blockquote>";
@@ -211,11 +264,13 @@ class Fb2Html {
 			case 'annotation':
 				return "<div class='annotation'$id>" . $this->node_children($n, $depth) . "</div>";
 			case 'text-author':
+				$this->blk($n);
 				return "<p class='text-author'>" . $this->inline($n) . "</p>";
 			case 'poem':
 				$s = '';
 				foreach ($n->childNodes as $c) {
 					if ($c->nodeType === XML_ELEMENT_NODE && $c->localName === 'title') {
+						$this->blk($c);
 						$s .= "<p class='poem-title'>" . $this->inline_children($c) . "</p>";
 					} else {
 						$s .= $this->node($c, $depth);
@@ -225,10 +280,13 @@ class Fb2Html {
 			case 'stanza':
 				return "<div class='stanza'>" . $this->node_children($n, $depth) . "</div>";
 			case 'v':
+				$this->blk($n);
 				return "<p class='v'>" . $this->inline($n) . "</p>";
 			case 'date':
+				$this->blk($n);
 				return "<p class='date'>" . $this->inline($n) . "</p>";
 			case 'image':
+				$this->blk($n);
 				return "<div class='image'$id>" . $this->img_tag(ltrim($this->href($n), '#'), '') . "</div>";
 			case 'table':
 				return "<div class='table-wrap'><table$id>" . $this->table_rows($n) . "</table></div>";
@@ -243,6 +301,7 @@ class Fb2Html {
 			if ($tr->nodeType !== XML_ELEMENT_NODE || $tr->localName !== 'tr') {
 				continue;
 			}
+			$this->blk($tr);
 			$s .= '<tr>';
 			foreach ($tr->childNodes as $td) {
 				if ($td->nodeType === XML_ELEMENT_NODE && in_array($td->localName, ['td', 'th'])) {
@@ -342,10 +401,39 @@ function fb2html_book($bookid, $webroot) {
 		'lang' => $conv->lang, 'images' => $conv->images];
 	$json = json_encode($r, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
 	file_put_contents("$tmp/book.json", $json);
+	file_put_contents("$tmp/xp.txt", implode("\n", $conv->xps));
 	// готовый каталог появляется целиком; если его успел создать параллельный запрос — оставляем тот
 	if (!@rename($tmp, $dir)) {
 		array_map('unlink', glob("$tmp/*"));
 		@rmdir($tmp);
 	}
 	return json_decode($json);
+}
+
+// Адреса блоков текста в KOReader (см. xp.txt выше); null — книги нет или она не разбирается.
+// Для книг, разобранных до появления xp.txt, он досчитывается.
+function fb2html_xpointers($bookid) {
+	$file = FB2HTML_CACHE . "/$bookid/xp.txt";
+	if (!is_file($file)) {
+		$fresh = !is_dir(dirname($file));
+		if (!fb2html_book($bookid, '')) {
+			return null;
+		}
+		if (!$fresh && !is_file($file)) {
+			[$data, $ext] = kindle_book_file($bookid);
+			$tmp = sys_get_temp_dir() . "/fb2xp-$bookid-" . getmypid();
+			@mkdir($tmp, 0775, true);
+			ini_set('memory_limit', '512M');
+			$conv = new Fb2Html($bookid, '');
+			$ok = $ext === 'fb2' && $conv->convert($data, $tmp);
+			array_map('unlink', glob("$tmp/*"));
+			@rmdir($tmp);
+			if (!$ok) {
+				return null;
+			}
+			file_put_contents("$file.tmp" . getmypid(), implode("\n", $conv->xps));
+			rename("$file.tmp" . getmypid(), $file);
+		}
+	}
+	return explode("\n", file_get_contents($file));
 }
