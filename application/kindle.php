@@ -167,6 +167,20 @@ function kindle_dav_mkdir() {
 	return 201;
 }
 
+// Хэш, по которому KOReader узнаёт файл («Binary» в синхронизации прогресса, util.partialMD5):
+// MD5 кусков по 1024 байта со смещений 0, 1024, 4096, … 1024·4^10, пока смещение внутри файла
+function koreader_partial_md5($data) {
+	$ctx = hash_init('md5');
+	for ($i = -1; $i <= 10; $i++) {
+		$off = $i < 0 ? 0 : 1024 << (2 * $i);
+		if ($off >= strlen($data)) {
+			break;
+		}
+		hash_update($ctx, substr($data, $off, 1024));
+	}
+	return hash_final($ctx);
+}
+
 // Выкладывает книгу; возвращает null или текст ошибки
 function kindle_upload($uuid, $bookid) {
 	global $dbh;
@@ -187,9 +201,10 @@ function kindle_upload($uuid, $bookid) {
 	if ($code < 200 || $code >= 300) {
 		return 'Не удалось выложить книгу: ' . kindle_dav_error($code);
 	}
-	$stmt = $dbh->prepare("INSERT INTO kindle_file (user_uuid, bookid, path) VALUES (:u, :b, :p)
-		ON CONFLICT (user_uuid, bookid) DO UPDATE SET path=EXCLUDED.path, uploaded=now()");
-	$stmt->execute([':u' => $uuid, ':b' => $bookid, ':p' => $name]);
+	$stmt = $dbh->prepare("INSERT INTO kindle_file (user_uuid, bookid, path, md5_file, md5_name) VALUES (:u, :b, :p, :mf, :mn)
+		ON CONFLICT (user_uuid, bookid) DO UPDATE SET path=EXCLUDED.path, md5_file=EXCLUDED.md5_file,
+			md5_name=EXCLUDED.md5_name, uploaded=now()");
+	$stmt->execute([':u' => $uuid, ':b' => $bookid, ':p' => $name, ':mf' => koreader_partial_md5($data), ':mn' => md5($name)]);
 	return null;
 }
 

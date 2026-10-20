@@ -80,6 +80,18 @@ FB2 разбирается один раз: текст, оглавление и 
 
 Пока не заданы первые четыре, полки нет. В KOReader: «Облачное хранилище» → WebDAV с тем же адресом и папкой.
 
+### Синхронизация прогресса
+
+`public/kosync.php` — сервер синхронизации прогресса KOReader (Progress sync), совместимый с koreader-sync-server. Сайт доступен только из VPN/LAN, поэтому наружу (через внешний reverse proxy) публикуется только этот скрипт: FastCGI с фиксированным `SCRIPT_FILENAME=/application/public/kosync.php`, путь запроса (`/users/auth`, `/syncs/progress/…`) скрипт берёт из `REQUEST_URI`.
+
+| Переменная | Что это |
+|---|---|
+| `FLIBUSTA_KOSYNC_USER`, `FLIBUSTA_KOSYNC_PASSWORD` | логин и пароль для KOReader (или `FLIBUSTA_KOSYNC_PASSWORD_FILE`). Регистрации нет |
+
+Прогресс записывается пользователю `FLIBUSTA_KINDLE_USER`. Книга узнаётся по хэшу файла, выложенного с полки «На Kindle»: на сайте обновляется процент (книга появляется в «Продолжить чтение»), статус становится «Читаю», а с 99% — «Прочитано» («Бросил» не меняется). Точное место из KOReader сайт не понимает, веб-читалка откроет FB2 по проценту. Прогресс книг, попавших на Kindle не с сайта, хранится только для KOReader.
+
+В KOReader (в открытой книге): «Инструменты» → «Progress sync» → «Custom sync server» — адрес kosync; затем «Login» (не «Register») с логином и паролем; «Document matching method» — Binary; включить «Automatically keep documents in sync».
+
 ## Проверка
 
 ```bash
